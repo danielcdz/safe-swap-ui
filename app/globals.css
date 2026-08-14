@@ -23,6 +23,12 @@
   --color-chat-bubble-outgoing: var(--chat-bubble-outgoing);
   --color-chat-bubble-outgoing-foreground: var(--chat-bubble-outgoing-foreground);
 
+  /* Status tokens — so escrow states stop reaching for raw amber/blue/green
+     scales and follow the theme like everything else. */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
   /* Brand typeface (Satoshi, self-hosted via next/font in layout.tsx) */
   --font-sans: var(--font-satoshi), ui-sans-serif, system-ui, sans-serif;
 
@@ -61,6 +67,9 @@
   --accent: #e6fbf2;
   --accent-foreground: #016b5b;
   --destructive: #ff5957;
+  --success: #01875f;
+  --warning: #b06c00;
+  --info: #1446f0;
   --border: #d2ded8;
   --input: #d2ded8;
   --ring: #01a78f;
@@ -95,6 +104,9 @@
   --accent: #16282a;
   --accent-foreground: #e6fbf2;
   --destructive: #ff5957;
+  --success: #5fd6ac;
+  --warning: #f0b429;
+  --info: #7c9bff;
   --border: #1c2e2c;
   --input: #1c2e2c;
   --ring: #5fd6ac;

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { openOrder } from "@/components/trade/open-orders-store";
 import { cn } from "@/lib/utils";
 import { formatAsset, formatFiat, formatPrice } from "@/lib/format";
 import { MARKET, type P2POrder } from "./types";
@@ -96,11 +97,28 @@ export function OrderTradePanel({
     ? `${formatFiat(minInput)} – ${formatFiat(maxInput)}`
     : `${formatAsset(minInput)} – ${formatAsset(maxInput)} ${MARKET.asset}`;
 
-  /** Seam: the real flow deploys the escrow contract, then opens the trade. */
+  /**
+   * Seam: the real flow deploys the escrow contract, then opens the trade.
+   * With no backend to create an order against, the sized amount and chosen
+   * method travel to the trade screen in the URL.
+   */
   async function handleSubmit() {
     setSubmitting(true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    router.push(`/trades/${order.id}`);
+
+    openOrder({
+      orderId: order.id,
+      amount,
+      method,
+      status: "pending",
+      createdAt: Date.now(),
+    });
+
+    const query = new URLSearchParams({
+      amount: String(amount),
+      method,
+    });
+    router.push(`/trades/${order.id}?${query}`);
   }
 
   return (
