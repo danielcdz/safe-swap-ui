@@ -31,7 +31,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         mounted ? `Switch to ${isDark ? "light" : "dark"} theme` : "Toggle theme"
       }
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className={cn("bg-card text-foreground shadow-lg", className)}
+      className={cn("text-foreground", className)}
     >
       {mounted && isDark ? (
         <Sun className="size-5" />

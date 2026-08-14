@@ -68,6 +68,9 @@
   --chat-bubble-outgoing-foreground: #e6fbf2;
   --radius: 0.75rem;
 
+  /* Native controls (select popups, form widgets) follow the theme. */
+  color-scheme: light;
+
   /* Ambient field — soft brand light bleeding into the canvas */
   --aurora-a: rgb(1 167 143 / 0.14);
   --aurora-b: rgb(95 214 172 / 0.22);
@@ -102,6 +105,8 @@
   --aurora-b: rgb(95 214 172 / 0.10);
   --aurora-c: rgb(1 107 91 / 0.24);
   --grain-opacity: 0.05;
+
+  color-scheme: dark;
 }
 
 * {

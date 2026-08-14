@@ -3,6 +3,7 @@
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { ExternalLink } from "lucide-react";
 import { ShieldMark, WordmarkText } from "@/components/brand/logo";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { ConnectWalletButton } from "@/components/auth/connect-wallet-button";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -32,6 +33,7 @@ export function ConnectScreen() {
 
   return (
     <main className="bg-aurora bg-grain relative isolate flex min-h-dvh w-full flex-col overflow-hidden">
+      <ThemeToggle className="fixed end-4 bottom-4 z-50 bg-card shadow-lg" />
       <motion.div
         variants={container}
         initial={reduced ? false : "hidden"}
