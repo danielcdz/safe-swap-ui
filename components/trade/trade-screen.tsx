@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatAsset } from "@/lib/format";
 import { useMounted } from "@/lib/use-mounted";
 import { cn } from "@/lib/utils";
-import { setOpenOrderStatus } from "./open-orders-store";
+import { setOpenOrderStatus, useOpenOrders } from "./open-orders-store";
 import { EscrowStatusBadge } from "./escrow-status-badge";
 import { EscrowStepper } from "./escrow-stepper";
 import { TradeSummary } from "./trade-summary";
@@ -18,6 +18,15 @@ import type { EscrowStatus, Trade, TradeMessage } from "./types";
 
 /** Stage 2 = deploy and fund are done; the fiat leg is what's outstanding. */
 const INITIAL_STAGE = 2;
+
+/** How far along a stored status says the lifecycle already is. */
+const STAGE_BY_STATUS: Record<EscrowStatus, number> = {
+  pending: 2,
+  funded: 3,
+  disputed: 3,
+  cancelled: 2,
+  released: 4,
+};
 
 /** Runs inside a lazy state initializer, so reading the clock here is fine. */
 function initialMessages(trade: Trade): TradeMessage[] {
@@ -43,6 +52,27 @@ function statusFor(stage: number, disputed: boolean): EscrowStatus {
   if (stage >= 4) return "released";
   if (stage >= 3) return "funded";
   return "pending";
+}
+
+/** What the screen is asking of you right now. */
+function headingFor({
+  cancelled,
+  disputed,
+  settled,
+  isBuy,
+  stage,
+}: {
+  cancelled: boolean;
+  disputed: boolean;
+  settled: boolean;
+  isBuy: boolean;
+  stage: number;
+}) {
+  if (cancelled) return "Order cancelled";
+  if (disputed) return "Trade in dispute";
+  if (settled) return "Trade complete";
+  if (isBuy) return stage === 2 ? "Send your payment" : "Waiting for release";
+  return stage === 2 ? "Waiting for payment" : `Release the ${MARKET.asset}`;
 }
 
 /** Countdown against the trader's payment window. */
@@ -71,16 +101,30 @@ function Countdown({ minutes }: { minutes: number }) {
 
 export function TradeScreen({ trade }: { trade: Trade }) {
   const isBuy = trade.mode === "buy";
-  const [stage, setStage] = React.useState(INITIAL_STAGE);
-  const [disputed, setDisputed] = React.useState(false);
-  const [cancelled, setCancelled] = React.useState(false);
+  const [localStage, setLocalStage] = React.useState(INITIAL_STAGE);
+  const [localDisputed, setLocalDisputed] = React.useState(false);
+  const [localCancelled, setLocalCancelled] = React.useState(false);
   const [confirmingCancel, setConfirmingCancel] = React.useState(false);
   const [pending, setPending] = React.useState(false);
   const [messages, setMessages] = React.useState<TradeMessage[]>(() =>
     initialMessages(trade),
   );
 
-  const status = cancelled ? "cancelled" : statusFor(stage, disputed);
+  // Resume has to land where the trade actually is. The stored record sets
+  // the floor; anything done in this session can only move it forward.
+  const stored = useOpenOrders().find(
+    (record) => record.orderId === trade.orderId,
+  );
+  const stage = Math.max(
+    localStage,
+    stored ? STAGE_BY_STATUS[stored.status] : INITIAL_STAGE,
+  );
+  const disputed = localDisputed || stored?.status === "disputed";
+  const cancelled = localCancelled || stored?.status === "cancelled";
+
+  const status: EscrowStatus = cancelled
+    ? "cancelled"
+    : statusFor(stage, disputed);
 
   function push(message: Omit<TradeMessage, "id" | "timestamp">) {
     const timestamp = Date.now();
@@ -96,7 +140,7 @@ export function TradeScreen({ trade }: { trade: Trade }) {
 
   /** Advances the stepper and keeps the open-orders record in step. */
   function advanceTo(next: number) {
-    setStage(next);
+    setLocalStage(next);
     setOpenOrderStatus(trade.orderId, statusFor(next, false));
   }
 
@@ -128,14 +172,14 @@ export function TradeScreen({ trade }: { trade: Trade }) {
   }
 
   function raiseDispute() {
-    setDisputed(true);
+    setLocalDisputed(true);
     setOpenOrderStatus(trade.orderId, "disputed");
     push({ author: "system", text: "Dispute raised — a resolver was notified" });
   }
 
   /** Seam: the real cancel refunds the escrow to the seller and closes it. */
   function cancelOrder() {
-    setCancelled(true);
+    setLocalCancelled(true);
     setConfirmingCancel(false);
     setOpenOrderStatus(trade.orderId, "cancelled");
     push({
@@ -157,19 +201,7 @@ export function TradeScreen({ trade }: { trade: Trade }) {
   const actionDisabled =
     pending || disputed || closed || (isBuy && stage > 2);
 
-  const heading = cancelled
-    ? "Order cancelled"
-    : disputed
-      ? "Trade in dispute"
-      : settled
-      ? "Trade complete"
-      : isBuy
-        ? stage === 2
-          ? "Send your payment"
-          : "Waiting for release"
-        : stage === 2
-          ? "Waiting for payment"
-          : "Release the USDC";
+  const heading = headingFor({ cancelled, disputed, settled, isBuy, stage });
 
   return (
     <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-8 sm:px-6">
@@ -236,7 +268,7 @@ export function TradeScreen({ trade }: { trade: Trade }) {
                 has, the way out is a dispute. */}
             {!closed && !disputed && stage === 2 ? (
               <Button
-                variant="ghost"
+                variant="danger"
                 size="lg"
                 onClick={() => setConfirmingCancel(true)}
               >

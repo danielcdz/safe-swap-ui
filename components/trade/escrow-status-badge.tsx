@@ -11,7 +11,8 @@ const STATUS = {
   released: { label: "Released", className: "border-success/30 bg-success/10 text-success" },
   cancelled: {
     label: "Cancelled",
-    className: "border-border bg-muted text-muted-foreground",
+    className:
+      "border-destructive/30 bg-destructive/10 text-destructive",
   },
 } as const satisfies Record<EscrowStatus, { label: string; className: string }>;
 

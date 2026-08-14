@@ -9,6 +9,7 @@ import { TabBar } from "@/components/ui/tab-bar";
 import { cn } from "@/lib/utils";
 import { MARKET, type OrderMode } from "./types";
 import { MOCK_ORDERS, PAYMENT_METHODS } from "./mock-orders";
+import { SIDE_TONE } from "./side";
 import { MarketStats } from "./market-stats";
 import { ORDER_GRID, OrderRow } from "./order-row";
 
@@ -105,6 +106,7 @@ export function OrderBook() {
             tabs={["Buy", "Sell"]}
             activeIndex={modeIndex}
             onChange={changeMode}
+            activeTone={SIDE_TONE[mode].tab}
           />
 
           {/* MVP is a single market — the chip states it instead of offering

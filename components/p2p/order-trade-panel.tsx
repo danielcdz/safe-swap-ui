@@ -8,6 +8,7 @@ import { openOrder } from "@/components/trade/open-orders-store";
 import { cn } from "@/lib/utils";
 import { formatAsset, formatFiat, formatPrice } from "@/lib/format";
 import { MARKET, type P2POrder } from "./types";
+import { SIDE_TONE } from "./side";
 
 /** Small currency chip. USDC gets the brand tint, fiat stays neutral. */
 function UnitChip({ unit }: { unit: string }) {
@@ -241,6 +242,7 @@ export function OrderTradePanel({
 
         <Button
           size="lg"
+          variant={SIDE_TONE[order.mode].button}
           className="mt-1 w-full"
           disabled={!canSubmit}
           aria-busy={submitting}
@@ -252,7 +254,7 @@ export function OrderTradePanel({
               Opening escrow…
             </>
           ) : (
-            `${isBuy ? "Buy" : "Sell"} ${MARKET.asset}`
+            `${SIDE_TONE[order.mode].label} ${MARKET.asset}`
           )}
         </Button>
       </div>

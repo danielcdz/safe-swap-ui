@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Check, Copy } from "lucide-react";
 import { MARKET } from "@/components/p2p/types";
+import { SIDE_TONE } from "@/components/p2p/side";
 import { WalletBadge } from "@/components/ui/wallet-badge";
 import { cn } from "@/lib/utils";
 import { formatAsset, formatFiat, formatPrice, truncateAddress } from "@/lib/format";
@@ -39,8 +40,13 @@ export function TradeSummary({ trade }: { trade: Trade }) {
       className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5 shadow-sm"
     >
       <div className="flex flex-col gap-3">
-        <span className="text-xs font-semibold tracking-wider text-primary uppercase">
-          {isBuy ? "Buy" : "Sell"} {MARKET.asset}
+        <span
+          className={cn(
+            "text-xs font-semibold tracking-wider uppercase",
+            SIDE_TONE[trade.mode].text,
+          )}
+        >
+          {SIDE_TONE[trade.mode].label} {MARKET.asset}
         </span>
 
         <div className="flex items-baseline justify-between gap-3">

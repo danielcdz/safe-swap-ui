@@ -12,6 +12,7 @@ import {
   truncateAddress,
 } from "@/lib/format";
 import { MARKET, type P2POrder } from "./types";
+import { SIDE_TONE } from "./side";
 import { OrderTradePanel } from "./order-trade-panel";
 
 /** Shared by the row and the column header so the two stay locked together. */
@@ -162,7 +163,7 @@ export function OrderRow({ order, open, onToggle }: OrderRowProps) {
 
         {/* Trade */}
         <Button
-          variant={open ? "ghost" : "primary"}
+          variant={open ? "ghost" : SIDE_TONE[order.mode].button}
           className="w-full lg:w-auto lg:min-w-32 lg:justify-self-end"
           aria-expanded={open}
           aria-controls={panelId}
@@ -174,7 +175,7 @@ export function OrderRow({ order, open, onToggle }: OrderRowProps) {
               <ChevronUp aria-hidden className="size-4" />
             </>
           ) : (
-            `${order.mode === "buy" ? "Buy" : "Sell"} ${MARKET.asset}`
+            `${SIDE_TONE[order.mode].label} ${MARKET.asset}`
           )}
         </Button>
       </div>

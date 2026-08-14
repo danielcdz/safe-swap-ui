@@ -8,13 +8,29 @@ export interface TabBarProps
   tabs: string[];
   activeIndex: number;
   onChange: (index: number) => void;
+  /** `sm` fits inside a section header; `md` stands alone. */
+  size?: "sm" | "md";
+  /** Tone of the selected tab — lets a buy/sell switch carry its side colour. */
+  activeTone?: "primary" | "destructive";
 }
+
+const toneClasses = {
+  primary: "bg-primary/15 font-medium text-primary",
+  destructive: "bg-destructive/15 font-medium text-destructive",
+} as const;
+
+const sizeClasses = {
+  sm: "px-3.5 py-1 text-xs",
+  md: "px-6 py-2 text-sm",
+} as const;
 
 /** Pill segmented control with a full roving tabindex. */
 export function TabBar({
   tabs,
   activeIndex,
   onChange,
+  size = "md",
+  activeTone = "primary",
   className,
   ...props
 }: TabBarProps) {
@@ -64,10 +80,11 @@ export function TabBar({
             onClick={() => onChange(index)}
             onKeyDown={(event) => handleKeyDown(event, index)}
             className={cn(
-              "cursor-pointer rounded-full px-6 py-2 text-sm whitespace-nowrap transition-colors",
+              "cursor-pointer rounded-full whitespace-nowrap transition-colors",
+              sizeClasses[size],
               "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:outline-hidden",
               isActive
-                ? "bg-primary/15 font-medium text-primary"
+                ? toneClasses[activeTone]
                 : "font-normal text-muted-foreground hover:text-foreground",
             )}
           >

@@ -19,6 +19,9 @@ const buttonVariants = cva(
       variant: {
         primary:
           "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 active:bg-primary/95",
+        // The sell side of a trade. Solid, so it reads as a peer of `primary`
+        // rather than as the tinted `danger` used for destructive actions.
+        sell: "bg-destructive text-white shadow-xs hover:bg-destructive/90 active:bg-destructive/95",
         ghost:
           "border border-solid border-border bg-transparent text-foreground hover:bg-muted hover:text-foreground active:bg-muted/70",
         danger:
