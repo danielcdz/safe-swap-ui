@@ -1,14 +1,16 @@
-# SafeSwap — UI Rebuild Spec
+# SafeSwap — UI Spec
 
-A self-contained design + frontend spec for rebuilding the SafeSwap interface from scratch. **This is the build spec for this repo (`safe-swap-ui`)** — the UI is being rewritten here, clean, from the design system described below.
+The design system and frontend architecture of **this repo** (`safe-swap-ui`), as built.
 
-**Scope:** UI only. Wallet connectors, escrow/blockchain calls, API routes, and database wiring are deliberately excluded — see [Out of scope](#out-of-scope) for the seams to leave open.
+This started as a plan for rebuilding the SafeSwap interface from an earlier codebase. It is now a description of what exists, with the places we deliberately diverged from that earlier app recorded as decisions rather than debt. Where this document and the code disagree, the code wins — say so and fix the document.
+
+**Scope:** UI only. Wallet connectors, escrow/blockchain calls, API routes, and database wiring are deliberately excluded — see [Out of scope](#9-out-of-scope) for the seams left open.
 
 ---
 
 ## 0. Source repository
 
-Everything in this document was extracted from the **previous** SafeSwap app — a working Next.js 16 codebase that lives in a *separate repository on the same machine*. When this spec is ambiguous, read the real file rather than guessing.
+The original extraction came from the **previous** SafeSwap app — a working Next.js 16 codebase in a *separate repository on the same machine*. It remains useful reference for the screens not built yet.
 
 ```
 This repo:      /Users/danielcdz/Repos/safe-swap-ui        ← the rebuild (you are here)
@@ -21,72 +23,59 @@ Extracted:      2026-08-13
 
 > **The source repo is read-only for this project.** It is a separate, active codebase with its own workflow and ticket process. Read from it freely; never write to it.
 
-All source paths in this document are **relative to the source app root** unless stated otherwise. To read one, prefix it:
+Its most useful remaining files, for screens still to come:
 
-```bash
-# e.g. "app/globals.css" →
-/Users/danielcdz/Repos/SafeSwap/p2p-safe-swap/app/globals.css
-```
-
-The highest-value files, in the order you'd want them:
-
-| What | Path |
+| What | Path (relative to the source app root) |
 |---|---|
-| **All design tokens** — brand palette, semantic light/dark, radius, gradient, scrollbar | `app/globals.css` |
-| Root layout, font loading, providers, metadata | `app/layout.tsx` |
-| Persistent shell — fixed elements, nav suppression | `frontend/components/app-shell.tsx` |
-| Bottom navigation | `frontend/components/ui/bottom-nav.tsx` |
-| Button variants (`cva`) | `frontend/components/ui/Button/Button.variants.ts` |
-| Brand SVG marks | `frontend/components/brand/Logo.tsx` |
-| `cn()` helper | `lib/utils.ts` |
-| shadcn config — style, base color, aliases | `components.json` |
-| Tailwind v4 / PostCSS config | `postcss.config.mjs` |
-| Path aliases | `tsconfig.json` |
-| Font assets **+ license** | `app/fonts/` |
-| Project/agent onboarding, stack rules, gotchas | `AGENTS.md` |
-| Product scope, sprint plans, progress | `../docs/` (repo root, not app root) |
+| Chat message bubbles, payment bubbles, input bar | `frontend/components/chat/`, `frontend/components/PaymentBubble/` |
+| Transaction history list and rows | `frontend/components/ui/transaction-{row,list}.tsx` |
+| Wallet balance card and quick actions | `frontend/components/wallet/WalletSummary.tsx` |
+| Escrow admin / dispute resolver form | `app/escrow/[id]/admin/page.tsx` |
 
-> If the source repo is unavailable, this document stands on its own — every token value, class string, and behavior needed for the rebuild is reproduced inline below.
+Its design tokens, layout shell, and button variants have all been superseded by what is documented below — read this document for those, not the source.
 
 ---
 
 ## 1. Product context
 
-SafeSwap is a **peer-to-peer marketplace for buying and selling USDC on Stellar** against fiat rails (bank transfer, SINPE Móvil in Costa Rica; the current mock data also shows SEPA/Bizum/Revolut against EUR).
+SafeSwap is a **peer-to-peer marketplace for buying and selling USDC on Stellar** against fiat.
 
 The mechanic that shapes every screen: **two strangers trade, and an escrow contract sits between them.** A trade moves through a fixed lifecycle —
 
 ```
 deploy → fund → approve → release
                     ↘ dispute
+                    ↘ cancel (only before the fiat leg moves)
 ```
 
-Three consequences for the UI, and they're the reason the interface looks the way it does:
+Three consequences for the interface, and they are the reason it looks the way it does:
 
-1. **Trust signals are load-bearing.** Every counterparty is shown with a rating, an operation count, a verification mark, and a truncated wallet address that can be copied. A user decides whether to trade based on this block.
-2. **State must always be visible.** A user with money in escrow needs to know exactly which stage they're at. Hence the stepper, the status badges, and the per-message payment states.
-3. **Chat is a transaction surface, not a side feature.** Payments and payment *requests* are rendered inline as first-class message bubbles with their own actions (Pay / Reject / View receipt). Chat is where the trade actually happens.
+1. **Trust signals are load-bearing.** Every counterparty is shown with a handle, a rating, an operation count, a completion rate, a verification mark, and a truncated wallet address that can be copied. A user decides whether to trade on that block alone.
+2. **State must always be visible.** A user with money in escrow needs to know exactly which stage they are at — hence the stepper, the status badges, the countdown, and the persistent open-orders list.
+3. **Chat is a transaction surface, not a side feature.** Escrow events land in the same stream as the conversation, because the off-chain leg is coordinated there.
 
-The product is **mobile-first**. Every application screen is capped at `max-w-md` (448px) and centered — it reads as a phone app even on desktop. Only the marketing landing page widens.
+### Layout posture
 
-### Screens to rebuild
+**Desktop-first, capped at `max-w-[1400px]`.** The earlier app capped every screen at `max-w-md` (448px) and read as a phone app even on desktop. That was dropped: the order book is a dense, multi-column table that needs the width, and the trade screen runs order state and chat side by side. Every screen still collapses to a single column below `lg`.
 
-| Route | Source | Purpose |
+### Screens
+
+| Route | File | Status |
 |---|---|---|
-| `/` | `app/page.tsx` | Marketing landing. Only full-width screen; bottom nav hidden |
-| `/p2p/orders` | `app/p2p/orders/page.tsx` | Order book — buy/sell tabs, sorted by best price. Primary entry point |
-| `/p2p/orders/[id]` | `app/p2p/orders/[id]/page.tsx` | Single order detail + amount entry |
-| `/trades/[id]` | `app/trades/[id]/page.tsx` | Active trade — escrow stepper + actions |
-| `/chat/[id]` | `app/chat/[id]/page.tsx` | Trade chat with inline payment bubbles. `h-dvh`, no page padding |
-| `/wallet` | `app/wallet/page.tsx` | Balance, quick actions, recent activity |
-| `/transactions` | `app/transactions/page.tsx` | Full transaction history, searchable + tabbed |
-| `/escrow/[id]/admin` | `app/escrow/[id]/admin/page.tsx` | Admin/dispute-resolver form. Internal-facing |
+| `/` | `app/page.tsx` | **Built** — wallet connect. The front door; there is no marketing landing |
+| `/p2p/orders` | `app/p2p/orders/page.tsx` | **Built** — order book, your orders, inline trade panel |
+| `/trades/[id]` | `app/trades/[id]/page.tsx` | **Built** — escrow state + chat |
+| `/wallet` | — | Not built — balance, quick actions, recent activity |
+| `/transactions` | — | Not built — full history, searchable + tabbed |
+| `/escrow/[id]/admin` | — | Not built — dispute resolver form, internal-facing |
 
-The richest screen to study is `app/p2p/orders/page.tsx` — it holds the mock order fixtures, the buy/sell mode state, and the chat hand-off. Mock data worth porting lives there (`MOCK_ORDERS`, `MOCK_MESSAGES`) and in `app/wallet/page.tsx` (`mockTransactions`).
+**Market scope: USDC/USD only.** A single market, stated by a chip rather than offered as a selector. Payment rails are the ones that settle in dollars: Zelle, Wise, and Costa Rican banks that hold USD accounts (BAC Credomatic, Banco Nacional, Scotiabank). Colón rails such as SINPE Móvil would be a second market, not a payment method on this one.
+
+**Copy is English throughout.** The earlier app mixed English with hardcoded Spanish and a half-built per-component `lang` prop; neither was carried over. Adopting a real i18n library is still an open decision.
 
 ---
 
-## 2. Tech stack (UI layer)
+## 2. Tech stack
 
 | Concern | Choice | Version |
 |---|---|---|
@@ -95,7 +84,7 @@ The richest screen to study is `app/p2p/orders/page.tsx` — it holds the mock o
 | Language | TypeScript (`strict: true`) | ^5 |
 | Styling | Tailwind CSS **v4** — CSS-first config, no `tailwind.config.js` | ^4 |
 | PostCSS | `@tailwindcss/postcss` | ^4 |
-| Component base | shadcn/ui, `new-york` style, `neutral` base, CSS variables on | — |
+| Component base | shadcn/ui conventions, `new-york` style, `neutral` base, CSS variables on | — |
 | Variants | `class-variance-authority` | ^0.7.1 |
 | Class merging | `clsx` + `tailwind-merge` via a `cn()` helper | ^2.1.1 / ^3.6.0 |
 | Icons | `lucide-react` | ^1.17.0 |
@@ -103,36 +92,25 @@ The richest screen to study is `app/p2p/orders/page.tsx` — it holds the mock o
 | Theming | `next-themes` (class strategy) | ^0.4.6 |
 | Font loading | `next/font/local` (self-hosted Satoshi) | — |
 
-```bash
-npm i react react-dom next class-variance-authority clsx tailwind-merge \
-      lucide-react framer-motion next-themes
-npm i -D tailwindcss @tailwindcss/postcss typescript @types/react @types/react-dom @types/node
-```
+**No Radix.** Every interactive primitive here — tooltip, menu, dialog, tabs — is hand-rolled against the ARIA patterns. Worth revisiting only if something needs collision detection or a portal.
 
-**Tailwind v4 note:** there is no JS config file. Everything is declared in CSS via `@import "tailwindcss"` and an `@theme inline { … }` block. `postcss.config.mjs` is the entire build config:
+**Tailwind v4 note:** there is no JS config file. Everything is declared in CSS via `@import "tailwindcss"` and an `@theme inline { … }` block. `postcss.config.mjs` is the entire build config.
 
-```js
-const config = { plugins: { "@tailwindcss/postcss": {} } };
-export default config;
-```
+**ESLint** uses `eslint-config-next`'s native flat configs (`eslint-config-next/core-web-vitals` and `/typescript`), spread directly. `FlatCompat` does not work with v16 of that package.
 
 ### Path aliases
 
-`tsconfig.json` maps `@/*` → `./*`. Components live under a non-standard `frontend/` directory (a project choice, not a Next convention), so imports read `@/frontend/components/...`.
-
-**Recommendation for the rebuild:** drop `frontend/` and use the conventional `components/` at the root. It bought nothing and forced a custom alias into every import. The `components.json` aliases would then simplify to the shadcn defaults.
+`tsconfig.json` maps `@/*` → `./*`. Components live in a conventional `components/` at the repo root — the earlier app's non-standard `frontend/` directory was dropped, which removed a custom alias from every import.
 
 ---
 
 ## 3. Design tokens
 
-> **Source: `app/globals.css`** (129 lines — the entire design system). Read it in full; it is the single most important file to port.
+> **Source: `app/globals.css`** — the entire design system. Read it in full; it is the most important file in the repo.
 
 ### 3.1 Brand palette (theme-independent)
 
-*`app/globals.css` → `@theme inline` block, lines 29–40.*
-
-The raw identity colors. Named after the SafeSwap Visual Identity guide.
+The raw identity colors, named after the SafeSwap Visual Identity guide.
 
 | Token | Hex | Role |
 |---|---|---|
@@ -145,15 +123,13 @@ The raw identity colors. Named after the SafeSwap Visual Identity guide.
 | `--color-mint` | `#5fd6ac` | Mint — secondary/accent |
 | `--color-mint-soft` | `#9ce7cc` | Soft mint |
 | `--color-mint-pale` | `#e6fbf2` | Palest mint — dark-mode text, light accent fill |
-| `--color-spark` | `#1446f0` | Electric blue — reserved highlight |
+| `--color-spark` | `#1446f0` | Electric blue — now the light-theme `info` value |
 
-> Two of these are currently **declared but never used**: `--color-spark` and most of the `ink`/`mint` scale. Components consume the semantic layer below exclusively. Keep them declared as the identity reference, but don't expect them in component code.
+Components consume the semantic layer below, never these directly. The one exception is the brand mark, whose fills are fixed hex on purpose.
 
 ### 3.2 Semantic tokens
 
-*`app/globals.css` → `:root` (lines 48–70) and `.dark` (lines 73–94).*
-
-Components reference **only** these. This is what makes theming work — never hardcode a brand hex in a component.
+Components reference **only** these. Never hardcode a brand hex in a component.
 
 | Token | Light | Dark |
 |---|---|---|
@@ -172,106 +148,75 @@ Components reference **only** these. This is what makes theming work — never h
 | `accent` | `#e6fbf2` | `#16282a` |
 | `accent-foreground` | `#016b5b` | `#e6fbf2` |
 | `destructive` | `#ff5957` | `#ff5957` |
+| `success` | `#01875f` | `#5fd6ac` |
+| `warning` | `#b06c00` | `#f0b429` |
+| `info` | `#1446f0` | `#7c9bff` |
 | `border` | `#d2ded8` | `#1c2e2c` |
 | `input` | `#d2ded8` | `#1c2e2c` |
 | `ring` | `#01a78f` | `#5fd6ac` |
 | `chat-bubble-outgoing` | `#02201a` | `#016b5b` |
 | `chat-bubble-outgoing-foreground` | `#e6fbf2` | `#e6fbf2` |
 
-Light mode is a **green-tinted neutral** — the background is `#f5fcf9`, not white; cards are pure white and float above it. Dark mode is an **ink canvas with mint text**, mirroring the marketing landing.
+Light mode is a **green-tinted neutral** — the background is `#f5fcf9`, not white; cards are pure white and float above it. Dark mode is an **ink canvas with mint text**.
 
-`primary`, `secondary`, and `destructive` hold constant across themes. Only surfaces, text, and borders swap.
+`primary`, `secondary`, and `destructive` hold constant across themes. Only surfaces, text, borders, and the status trio swap.
 
-### 3.3 Radius
+**`success` / `warning` / `info` exist so escrow states stop reaching for raw `amber-*`/`blue-*`/`green-*` scales**, which ignored the green-tinted theme. `info` finally gives `--color-spark` a job.
 
-Base `--radius: 0.75rem` (12px), with a derived scale:
+Both themes also set **`color-scheme`** (`light` / `dark`), so native controls — `<select>` popups in particular — follow the theme instead of rendering a white list on an ink page.
 
-| Token | Value |
+### 3.3 Atmosphere tokens
+
+Used by the connect screen, theme-tuned so the ink canvas and the green-tinted light canvas each get the right intensity:
+
+| Token | Role |
 |---|---|
-| `--radius-sm` | `calc(var(--radius) - 4px)` → 8px |
-| `--radius-md` | `calc(var(--radius) - 2px)` → 10px |
-| `--radius-lg` | `var(--radius)` → 12px |
-| `--radius-xl` | `calc(var(--radius) + 4px)` → 16px |
+| `--aurora-a` / `-b` / `-c` | Three offset radial washes behind the page |
+| `--grain-opacity` | Film-grain overlay strength (`0.035` light, `0.05` dark) |
 
-In practice the UI leans on Tailwind's own scale more than these tokens: **cards use `rounded-2xl`** (16px), **buttons, pills, tabs, badges, and avatars are always `rounded-full`**, chat bubbles are `rounded-2xl` with one corner tightened to `rounded-*-md` to point at the speaker.
+### 3.4 Radius
+
+Base `--radius: 0.75rem` (12px), with `--radius-sm/md/lg/xl` derived from it.
+
+In practice the UI leans on Tailwind's own scale: **cards and panels are `rounded-2xl`** (16px), **buttons, pills, tabs, badges, inputs, and avatars are always `rounded-full`**, chat bubbles are `rounded-2xl` with one corner tightened to `rounded-*-md` to point at the speaker.
 
 The fully-rounded button is a defining trait of the brand. Keep it.
 
-### 3.4 Typography
+### 3.5 Typography
 
 **Satoshi Variable**, self-hosted, weights 300–900, loaded via `next/font/local` with `display: "swap"` and exposed as `--font-satoshi`.
 
-```
---font-sans: var(--font-satoshi), ui-sans-serif, system-ui, sans-serif;
-```
-
-Assets to copy into the new repo (`app/fonts/`):
-- `Satoshi-Variable.woff2` (42KB)
-- `SATOSHI-LICENSE.txt` — **copy this too; the license requires it**
-
-Observed type scale:
+Assets in `app/fonts/`: `Satoshi-Variable.woff2` and `SATOSHI-LICENSE.txt` — **the license must ship with the font.**
 
 | Use | Classes |
 |---|---|
-| Landing h1 | `text-4xl sm:text-5xl font-bold leading-tight tracking-tight` |
-| Page title | `text-lg font-semibold` |
+| Page title | `text-2xl font-bold tracking-tight` |
+| Hero number (amount, best price) | `text-3xl font-semibold tracking-tight tabular-nums` |
+| Amount input / row price | `text-2xl font-semibold tabular-nums` |
 | Section heading | `text-base font-semibold` |
-| Hero number (price, balance) | `text-3xl font-semibold tracking-tight tabular-nums` |
-| Card price | `text-xl sm:text-3xl font-bold leading-tight` |
-| Payment amount | `text-2xl font-bold leading-tight` |
 | Body | `text-sm` |
 | Secondary / meta | `text-sm text-muted-foreground` |
 | Labels, pills | `text-xs font-medium` |
-| Eyebrow / overline | `text-xs font-semibold uppercase tracking-wider` |
-| Date group | `text-[11px] uppercase tracking-[0.18em]` |
+| Eyebrow / column header | `text-xs font-semibold uppercase tracking-wider` |
+| Micro-label | `text-[11px] uppercase tracking-[0.18em]` |
 | Timestamps | `text-[11px] tabular-nums` |
 
 Two rules worth enforcing:
-- **`tabular-nums` on every number that sits in a column** — amounts, prices, timestamps. Prevents the jitter that makes a financial list feel cheap.
-- **`font-mono` for wallet addresses**, always truncated as `GDRX…UJUJ` (4 head, 4 tail, `…` separator) with the full value in a `title` attribute and a click-to-copy affordance.
 
-### 3.5 Global CSS
+- **`tabular-nums` on every number that sits in a column** — amounts, prices, counts, timestamps. Prevents the jitter that makes a financial list feel cheap.
+- **`font-mono` for wallet addresses**, always truncated as `GDRX…UJUJ` (4 head, 4 tail, `…` separator) via `truncateAddress()`, with the full value in a `title` attribute and a click-to-copy affordance.
 
-```css
-@import "tailwindcss";
+### 3.6 Global CSS beyond tokens
 
-@theme inline {
-  /* semantic → CSS var indirection, brand palette, radius scale, --font-sans */
-}
-
-:root  { /* light semantic values */ }
-.dark  { /* dark semantic values  */ }
-
-* { border-color: var(--border); }
-
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-}
-```
-
-Two global flourishes, both worth keeping:
-
-**Brand gradient text** — used on the landing headline:
-```css
-@layer components {
-  .text-grad {
-    background: linear-gradient(100deg, #5fd6ac 0%, #01a78f 55%, #5fd6ac 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-}
-```
-
-**Themed scrollbar** — 10px, gradient thumb (`#01a78f → #016b5b`), fully rounded, with a 2px background-colored border that insets it from the track.
+- `.text-grad` — brand gradient text (Persian Green → Mint), used on the connect headline.
+- `.bg-aurora` — three offset radial washes; atmosphere instead of a flat fill.
+- `.bg-grain` — `::after` film-grain overlay; stops large flat areas banding.
+- `.animate-breathe` — slow pulse behind the brand mark, disabled under `prefers-reduced-motion`.
+- Themed scrollbar — 10px, gradient thumb (`#01a78f → #016b5b`), fully rounded, inset by a 2px background-colored border.
 
 ---
 
 ## 4. Layout architecture
-
-> **Sources:** `app/layout.tsx`, `frontend/components/app-shell.tsx`, `frontend/components/ui/bottom-nav.tsx`
 
 ### Root layout
 
@@ -285,214 +230,249 @@ Two global flourishes, both worth keeping:
 </html>
 ```
 
-`suppressHydrationWarning` on `<html>` is required by `next-themes`. Metadata uses a title template: `"%s · SafeSwap"`.
+`suppressHydrationWarning` on `<html>` is required by `next-themes`. Metadata uses a title template: `"%s · SafeSwap"`, defaulting to `"SafeSwap — P2P USDC on Stellar"`.
 
-### App shell
+`AppShell` is currently just the flex frame. It stays as the seam for anything that must sit outside the page — a toast region, a nav rail.
 
-A persistent frame with three fixed elements:
+### App header
 
-| Element | Position |
-|---|---|
-| Wallet actions (connect, testnet setup) | `fixed right-4 top-4 z-50`, stacked column, right-aligned |
-| Bottom navigation | `fixed inset-x-0 bottom-0 z-40` |
-| Theme toggle | `fixed right-4 z-50` — `bottom-20` when nav is visible, `bottom-4` when not |
+`components/app-header.tsx` — used by the application screens, not by the connect screen.
 
-Content gets `pb-16` to clear the nav. The nav and its padding are **suppressed on `/`** so the landing page runs full-bleed.
+- `sticky top-0 z-40`, `border-b border-border`, `bg-background/85 backdrop-blur`
+- `h-16`, inner container `max-w-[1400px]` with `px-4 sm:px-6`
+- Left: wordmark, linking to the order book
+- Right: `WalletMenu` then `ThemeToggle`
+
+**There is no bottom navigation.** The earlier app's four-item mobile nav (Home / Orders / Wallet / Transactions) does not fit a desktop layout, and its Home item has no target now that `/` is the connect screen. Navigation items belong in this header as the remaining screens land.
 
 ### Page container
 
-Every application screen:
+Application screens:
 
 ```jsx
-<main className="mx-auto flex min-h-full w-full max-w-md flex-col bg-background px-4 py-6">
+<main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-8 sm:px-6">
 ```
 
-Variations: chat uses `h-dvh` with no padding (the input bar must sit at the true viewport bottom); the landing uses `max-w-xl` centered with `px-6 py-16`.
-
-### Bottom navigation
-
-4 items — Home (`/`), Orders (`/p2p/orders`), Wallet (`/wallet`), Transactions (`/transactions`). Icons: `Home`, `ArrowLeftRight`, `Wallet`, `Receipt`.
-
-- Container: `h-16 max-w-md`, `border-t border-border bg-card`, items `justify-around`
-- Respects the notch: `pb-[env(safe-area-inset-bottom)]`
-- Item: icon `size-5` above a `text-xs` label, `gap-1`, `rounded-full` hit area, `min-w-16`
-- Active: `text-primary font-medium` + `aria-current="page"`. Inactive: `text-muted-foreground font-normal`
-- Active matching is prefix-based (`/p2p/orders/abc` keeps Orders lit), except `/` which matches exactly
+The connect screen runs chrome-free and full-bleed: `min-h-dvh`, `bg-aurora bg-grain`, content centred in a `max-w-md` column, with its own floating theme toggle.
 
 ---
 
 ## 5. Component inventory
 
-### Button — the primitive
+All paths under `components/`.
 
-`cva`-based, three variants × three sizes.
+### Primitives — `ui/`
 
-Base: `inline-flex items-center justify-center rounded-full font-semibold tracking-wide transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-97 cursor-pointer select-none`
-
-| Variant | Treatment |
+| Component | Notes |
 |---|---|
-| `primary` | `bg-primary text-white shadow-xs`, hover `bg-primary/90`, active `bg-primary/95` |
-| `ghost` | Transparent with `border-zinc-200` outline, hover `bg-zinc-50` |
-| `danger` | `bg-red-50 text-red-600 border-red-100`, dark `bg-red-950/20 text-red-400` |
+| **Button** (`ui/button.tsx`) | `cva`-based. Variants `primary` \| `sell` \| `ghost` \| `danger`; sizes `sm` \| `md` \| `lg` \| `icon`. Takes **`children`**, so it wraps icons. All variants use semantic tokens. Base keeps `rounded-full`, `active:scale-97`, and a focus ring. |
+| **TabBar** (`ui/tab-bar.tsx`) | Pill segmented control. Track `bg-primary/5 rounded-full p-1`. Props `size` (`sm` for section headers, `md` standalone) and `activeTone` (`primary` \| `destructive`) so a buy/sell switch carries its side colour. Full roving tabindex — arrows, Home, End — with `role="tablist"`/`role="tab"`. |
+| **WalletBadge** (`ui/wallet-badge.tsx`) | Deterministic avatar. Hashes the **address** — not the handle, so identity survives a rename — to pick one of four token-based colour pairs, and derives 2-letter initials. Sizes `sm` \| `md` \| `lg`. |
+| **InfoTip** (`ui/info-tip.tsx`) | `(i)` affordance. Opens on hover, focus, **and tap** — pointer-only tooltips are unreachable by keyboard and invisible on touch. `role="tooltip"` + `aria-describedby`; Escape and blur dismiss. Resets inherited uppercase/tracking. |
+| **ConfirmDialog** (`ui/confirm-dialog.tsx`) | Modal for irreversible actions. `role="dialog" aria-modal`, Escape and backdrop press dismiss, focus moves to the confirm button on open and returns to the opener on close, body scroll locked. |
+| **ThemeToggle** (`ui/theme-toggle.tsx`) | Sun/Moon swap on the `Button` primitive at `size="icon"`. Uses `useSyncExternalStore` for a hydration-safe mounted flag. |
+| **TextField** (`ui/text-field.tsx`) | Pill input following the search-bar shape language — `rounded-full` on a `primary/5` wash, ring on focus, leading icon, trailing slot, inline error wired through `aria-invalid`/`aria-describedby`. **Currently unused**; kept for the amount-entry, dispute, and admin forms still to come. |
 
-| Size | Metrics |
+### Brand — `brand/logo.tsx`
+
+`ShieldMark` (two-tone SVG, shield + bidirectional arrows forming an S), `WordmarkText` (the name alone), and `Wordmark` (mark + name). The SVG fills are **fixed brand hex** that deliberately do not follow the theme — the mark stays on-brand on any surface. Paths come from the official identity guide; copy them verbatim.
+
+### Auth — `auth/`
+
+| Component | Notes |
 |---|---|
-| `sm` | `text-xs`, `px-3 py-1`, `min-h-[28px]` |
-| `md` | `text-sm`, `px-5 py-1.5`, `min-h-[34px]` (default) |
-| `lg` | `text-base`, `px-6 py-2`, `min-h-[40px]`, `sm:px-7` |
+| **ConnectScreen** | The front door. The mark centred in concentric rings over a slow breathing glow, wordmark, one button. Staggered entrance via framer-motion, reduced-motion honored. |
+| **ConnectWalletButton** | Pending state and error band around the connector seam. |
 
-The `active:scale-97` press feedback is a nice touch — keep it.
+### Order book — `p2p/`
 
-> **Two flaws to fix in the rebuild.** (1) The component takes a **`label` string prop instead of `children`**, so it can't wrap an icon — which is why the theme toggle bypasses it and hand-styles a `<button>` with `buttonVariants()`. Switch to `children`. (2) `ghost` and `danger` hardcode `zinc-*` and `red-*` instead of using `border`/`muted`/`destructive` tokens, so they don't follow the green-tinted theme. Rewrite them against semantic tokens.
+| Component | Notes |
+|---|---|
+| **OrderBook** (`p2p/order-book.tsx`) | Composition root. Owns side, filters, and which row is expanded. Holds the **side-aware sort**: buying sorts price ascending, selling descending, so the top row is always the offer worth taking. |
+| **OrderRow** (`p2p/order-row.tsx`) | One offer. Grid columns Advertiser / Price / Available–Limits / Payment / Trade, locked to the header by the exported `ORDER_GRID` constant. Stacks with inline labels below `lg`. The advertiser cell carries the trust block. Expands into the trade panel. |
+| **OrderTradePanel** (`p2p/order-trade-panel.tsx`) | Inline trade form. Trader's terms left, sizing right. See [§5.1](#51-the-amount-clamp). |
+| **MarketStats** (`p2p/market-stats.tsx`) | Best price / offers / average release, computed from the **visible** rows so the headline price is always actionable. |
+| **OpenOrders** (`p2p/open-orders.tsx`) | Your trades, above the book. Open/Past switch, contextual counts, Resume vs View, collapse toggle, per-row cancel. |
+| **SIDE_TONE** (`p2p/side.ts`) | The one map deciding that **buy is green and sell is red** — label, button variant, tab tone, pill tint, text colour. Every side-stating surface reads from it. |
 
-### Cards
+The panel is one `rounded-2xl` card with `divide-y` rows rather than a stack of separate cards: it keeps the density of a table inside the card language.
 
-`bg-card rounded-2xl border border-border p-5 shadow-sm`, contents in a `flex flex-col gap-5`. Interactive cards add `cursor-pointer transition-colors hover:border-primary/40` plus a focus ring — **hover changes the border, not the background.** Alongside `role="button"`, `tabIndex={0}`, and Enter/Space handling.
+#### 5.1 The amount clamp
 
-### Component list
+`available` and `limits` answer different questions in different currencies:
 
-All paths below are under `frontend/components/`.
+- **`available`** — USDC left on the whole offer. Drains as trades fill.
+- **`limits`** — the smallest and largest *single* trade the trader accepts, in USD. Fixed.
 
-| Component | Source | Notes |
-|---|---|---|
-| **Button** | `ui/Button/` — `Button.tsx`, `Button.variants.ts`, `types/index.ts` | See spec above. |
-| **TransactionCard** | `TransactionCard/TransactionCard.tsx` (+ `types/`, `utils/`) | The order-book card. Avatar + copyable mono address + verified badge + `★ rating · N ops`, large right-aligned price, available/window/limits rows, payment-method pills, action button. Dense but readable — the anchor of the whole design. |
-| **BestPriceCard** | `p2p/best-price-card.tsx` | Header stat block. Eyebrow label, `text-3xl tabular-nums` price, pair label, and an order-count pill (`bg-primary/10 text-primary rounded-full`) with a trend icon. |
-| **P2POrderList** | `p2p/p2p-order-list.tsx` | Composes BestPriceCard + TabBar + a Reveal-staggered card list. Holds the best-price sort logic. |
-| **TabBar** | `ui/tab-bar.tsx` | Pill segmented control. Track `bg-primary/5 rounded-full p-1`; active tab `bg-primary/15 font-medium text-primary`. Full roving-tabindex keyboard support (arrows, Home, End) with proper `role="tablist"`/`role="tab"`. |
-| **SearchBar** | `ui/search-bar.tsx` | `rounded-full bg-primary/5 px-4 py-2`, leading `Search` icon, transparent borderless input, `focus-within:ring-2`. |
-| **WalletBadge** | `ui/wallet-badge.tsx` | Deterministic avatar. Hashes the address to pick from 4 token-based color pairs and derives 2-letter initials. `size-9` (sm) / `size-11` (md). |
-| **TransactionRow** | `ui/transaction-row.tsx` | Badge + truncated address + memo + right-aligned signed amount (`+`/`−` with a true minus `−`) over a clock-icon timestamp. Incoming amounts are `text-primary`. |
-| **TransactionList** | `ui/transaction-list.tsx` | Search + tab filtering over day-grouped rows. Owns the `Transaction`/`TransactionTab` types. |
-| **DateGroup / DateSeparator** | `ui/date-group.tsx`, `chat/date-separator.tsx` | Wide-tracked uppercase micro-label for day grouping. |
-| **ThemeToggle** | `ui/theme-toggle.tsx` | `size-10 rounded-full bg-card shadow-lg`, Sun/Moon swap. Uses `useSyncExternalStore` for a hydration-safe mounted flag — worth copying, it avoids the usual flash. |
-| **EscrowStepper** | `trade/escrow-stepper.tsx` | Vertical `<ol>` timeline. 4 states: `completed` (filled primary + check), `current` (primary tint, ring, spinner), `pending` (bordered outline + dot), `disputed` (destructive tint + triangle). Connecting rail turns primary once a step completes. Timestamps via `Intl.DateTimeFormat`, `aria-current="step"`, screen-reader status text. |
-| **EscrowStatusBadge** | `escrows/status-badge.tsx` | `rounded-full border px-2.5 py-0.5 text-xs font-semibold` — amber/blue/red/green for pending/funded/disputed/released. |
-| **EscrowStatusPanel** | `escrows/escrow-status-panel.tsx` | Status summary strip. Types in `escrows/types.ts`. |
-| **ChatScreen** | `chat/chat-screen.tsx` | Composition root for chat: header, dispute banner, scrolling `role="log"` message area, input bar. Day-grouping in `chat/utils.ts`, types in `chat/types.ts`. |
-| **ChatHeader** | `chat/chat-header.tsx` | Back arrow, `WalletBadge`, truncated address, online dot, copy-address button with a check-mark confirmation, dispute trigger. |
-| **ChatMessageBubble** | `chat/chat-message-bubble.tsx` | `max-w-[78%] rounded-2xl px-4 py-2.5`. Outgoing: `bg-chat-bubble-outgoing` with the bottom-right corner tightened; incoming: `bg-muted`, bottom-left tightened. Delivery ticks (single = sent, double = delivered/read, primary when read). |
-| **PaymentBubble** | `PaymentBubble/PaymentBubble.tsx` (+ `types/`, `utils/`) | The distinctive one. Fixed `w-72` card *inside* the chat stream, three-part: header (circular direction icon + type label + `text-2xl` amount), optional quoted memo, hairline divider, then a status footer on a tinted band carrying the actions — Pay/Reject when pending, "View receipt →" when completed, an X and destructive text when rejected. |
-| **ChatInputBar** | `chat/chat-input-bar.tsx` | `border-t` bar: a "Pay" button, an auto-grow `textarea` (`min-h-10 max-h-32`, Enter sends / Shift+Enter newlines), and a Send button disabled until non-empty. |
-| **RaiseDisputeDialog** | `chat/raise-dispute-dialog.tsx` | Modal with reason textarea + submitting/error states. |
-| **Reveal** | `motion/reveal.tsx` | Framer Motion scroll-entrance wrapper. |
-| **Logo** | `brand/Logo.tsx` | `ShieldMark` (two-tone SVG, shield + bidirectional arrows forming an S) and `Wordmark` (mark + "**Safe**Swap", bold/regular split). |
-| **BottomNav** | `ui/bottom-nav.tsx` | See §4. |
-| **AppShell** | `app-shell.tsx` | See §4. |
-| **ThemeProvider** | `theme-provider.tsx` | Thin `next-themes` wrapper. |
+The most anyone can trade is therefore **`min(limits.max, available × price)`** — the stated limit or what the remaining inventory is actually worth, whichever binds first. The trade panel enforces exactly that, and when inventory is the binding side the helper line says so (*"capped by remaining USDC"*). The `InfoTip` on the column header explains the distinction in the book itself. Fixtures include one offer where inventory binds, so the case stays reachable.
 
-Wallet-facing components (`wallet/ConnectWalletButton.tsx`, `wallet/WalletSummary.tsx`, `wallet/SetupTestnetButton.tsx`) are **presentational shells over excluded logic** — `WalletSummary` is worth reading for the balance-card layout and quick-action row; the other two are connector-bound (see §9).
+The amount is entered in whichever currency the side makes natural — fiat when buying, USDC when selling — and the opposite figure derives from price. Limits are quoted in fiat, so the sell side converts before validating.
 
-### Brand mark
+### Trade — `trade/`
 
-The `ShieldMark` SVG uses **fixed brand hex fills** (`#01a78f` top, `#5fd6ac` bottom) that deliberately do *not* follow the theme — the mark stays on-brand on any surface. Only the wordmark text uses `text-foreground`. Copy the SVG paths verbatim from `frontend/components/brand/Logo.tsx`; they come from the official identity guide.
+| Component | Notes |
+|---|---|
+| **TradeScreen** (`trade/trade-screen.tsx`) | Composition root. Order state left, chat right. Owns the lifecycle, the contextual primary action, cancel, and dispute. |
+| **TradeSummary** (`trade/trade-summary.tsx`) | Side eyebrow, fiat amount as the hero figure, price, asset leg, method, counterparty, copyable reference. |
+| **EscrowStepper** (`trade/escrow-stepper.tsx`) | Vertical `<ol>` timeline over `ESCROW_STEPS`. States `completed` (filled primary + check), `current` (primary tint, ring, spinner), `pending` (bordered outline + dot), `disputed` (destructive tint + triangle). The connecting rail turns primary behind completed steps. A `halted` prop drops the spinner when a lifecycle stopped short. `aria-current="step"`, screen-reader status text. |
+| **EscrowStatusBadge** (`trade/escrow-status-badge.tsx`) | `rounded-full border px-2.5 py-0.5 text-xs font-semibold`. Mapped with `satisfies Record<EscrowStatus, …>`, so extending the union forces the badge to keep up. |
+| **buildTrade** (`trade/build-trade.ts`) | Order + entered amount → `Trade`. Shared by the trade page and the open-orders list so the two cannot disagree about what a trade is worth. |
+| **open-orders-store** (`trade/open-orders-store.ts`) | Client-side trade list and the collapsed preference. See [§5.2](#52-open-orders-state). |
+
+#### 5.2 Open-orders state
+
+Trades in flight outlive route changes, so they live in an **external store** backed by `localStorage`, read through `useSyncExternalStore`.
+
+That choice is deliberate: restoring from storage during render is the classic hydration mismatch, because the server has no storage. `useSyncExternalStore` hands React an empty server snapshot, hydrates cleanly, then re-reads the real one. It also needs no provider and syncs across tabs via the `storage` event for free.
+
+Semantics:
+
+- **One trade per order.** Reopening an offer replaces its record rather than stacking duplicates.
+- **Status updates no-op for unknown IDs**, so a dismissed trade cannot resurrect itself from a timer.
+- **Dismissing a row removes it from the list only.** The escrow is untouched — the labels say so.
+- **The trade screen seeds from the stored record.** Stored status sets a floor (`pending`→2, `funded`/`disputed`→3, `released`→4); session actions can only move it forward. Without this, Resume would reopen a cancelled order as live.
+
+Statuses split into Open (`pending`, `funded`, `disputed`) and Past (`released`, `cancelled`). **A dispute counts as open** — it is unresolved and needs action; filing it under history would bury the trade that most needs attention.
+
+### Chat — `chat/chat-panel.tsx`
+
+Header (counterparty avatar with live dot, handle, address, trade count), a dismissible safety notice, the message stream, and a composer where Enter sends and Shift+Enter breaks the line.
+
+- Outgoing bubbles: `bg-chat-bubble-outgoing`, bottom-right corner tightened, delivery ticks (single = sent, double = delivered/read, primary when read).
+- Incoming: `bg-muted`, bottom-left tightened.
+- **System messages** are centred pills — escrow events land in the same stream as the conversation, which is the point.
+- `role="log" aria-live="polite"`, auto-scrolled on new messages.
+
+The safety notice carries the one thing that actually loses people money: *never release USDC until the payment has cleared in your own account.*
+
+### Wallet — `wallet/wallet-menu.tsx`
+
+The connected-wallet chip and its menu: header with avatar and address, **Copy address**, and **Disconnect** — the dApp's logout, since there is no session beyond the wallet. Full ARIA menu pattern: `aria-haspopup`, ArrowDown to open, focus into the menu, arrows cycle, Escape and Tab close and restore focus, `pointerdown` outside dismisses.
 
 ---
 
 ## 6. Motion
 
-> **Source:** `frontend/components/motion/reveal.tsx`
+Framer Motion, used sparingly, at two moments:
 
-Framer Motion, used sparingly. One shared `Reveal` wrapper:
+- **Connect screen** — staggered entrance; the mark scales up (0.92→1), the action fades in behind it. Shared easing `[0.22, 1, 0.36, 1]`.
+- **Order book** — the panel fades up once on mount.
 
-- Variants: `up` (`opacity 0→1`, `y 24→0`) and `scale` (`opacity 0→1`, `scale 0.96→1`)
-- Transition: `duration: 0.6`, custom ease `[0.22, 1, 0.36, 1]`
-- Trigger: `whileInView`, `once: true`, `margin: "-60px"`
-- **Honors `prefers-reduced-motion`** — returns a plain `<div>` when reduced
+Both branch on `useReducedMotion()` and pass `initial={false}` when reduced, so nothing animates.
 
-List stagger: `delay={Math.min(index, 6) * 0.06}` — caps at the 7th item so long lists don't crawl.
+Everything else is CSS: `transition-colors`, `transition-all duration-200`, `active:scale-97`, and `.animate-breathe` (disabled under `prefers-reduced-motion` in the stylesheet itself). `disableTransitionOnChange` on the ThemeProvider prevents a colour sweep during theme switches.
 
-Everything else is CSS: `transition-colors`, `transition-all duration-200`, `active:scale-97`. `disableTransitionOnChange` on the ThemeProvider prevents a color-transition sweep during theme switches.
+The earlier app's scroll-triggered `Reveal` wrapper was not carried over — nothing here is long enough to scroll into.
 
 ---
 
-## 7. Conventions to carry over
+## 7. Conventions
 
-**The `cn()` helper** (`lib/utils.ts`) — every component merges classes through it:
-```ts
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
-```
+**The `cn()` helper** (`lib/utils.ts`) — every component merges classes through it.
 
-**`data-slot` attributes** on component roots (`data-slot="tab-bar"`, `"chat-screen"`, …) — shadcn convention, gives styling and testing hooks.
+**`data-slot` attributes** on component roots (`data-slot="order-row"`, `"chat-panel"`, …) — shadcn convention, gives styling and testing hooks.
 
 **Props pattern:** extend `React.ComponentProps<"div">`, destructure `className`, spread `...props` last.
 
-**Server-first:** components are RSC by default; `"use client"` only where hooks, `window`, or handlers are needed. Presentational components (BestPriceCard, TransactionRow, WalletBadge, ChatMessageBubble, DateGroup, EscrowStatusBadge) stay server components.
+**Server-first:** components are RSC by default; `"use client"` only where hooks, `window`, or handlers are needed. Pages stay server components so they can own `metadata`.
 
-**Accessibility** — consistently strong in the existing code; hold the line:
-- `focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1|2` on everything interactive
+**Formatting** goes through `lib/format.ts`: `formatFiat`, `formatAsset`, `formatPrice`, `truncateAddress`. Explicit locales keep SSR and the client in agreement. **Prices render to three decimals** — USDC trades within a cent of parity, and two would flatten every offer to `1.00`.
+
+### React rules this codebase has already been bitten by
+
+- **No `Date.now()` in a render body.** It is impure and lint enforces it. Resolve timestamps once when a message is created — in an event handler or a lazy `useState` initializer, both of which are fine.
+- **No `setState` in an effect.** Lint enforces this too. Reach for `useSyncExternalStore` when you need external state.
+- **Anything timezone- or clock-dependent renders only after mount**, behind `useMounted()` (`lib/use-mounted.ts`). The server cannot know the viewer's timezone, so formatting a time during SSR is a guaranteed mismatch.
+
+### Accessibility — hold the line
+
+- `focus-visible:ring-2 focus-visible:ring-ring` with an offset on everything interactive
 - `aria-label` on all icon-only buttons; `aria-hidden` on decorative SVGs
-- `aria-current="page"` / `"step"` for nav and stepper
-- `role="log" aria-live="polite"` on the message list; `role="alert"` on errors
-- Full keyboard support on the tab bar; Enter/Space on clickable cards
-- `sr-only` text where color alone would carry meaning (stepper statuses)
+- `aria-expanded`/`aria-controls` on every disclosure — trade panel, orders collapse, wallet menu
+- `aria-current="step"` on the stepper; `role="log" aria-live="polite"` on messages; `role="alert"` on errors
+- Full keyboard support on the tab bar, wallet menu, and dialog
+- `sr-only` text where colour alone would carry meaning (stepper statuses)
 
-**Empty states** are designed, not forgotten: `rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground`.
+**Empty states are designed, not forgotten:** `rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground`.
+
+### Colour discipline
+
+`SIDE_TONE` decides side colour; `destructive` means danger. These must not collide:
+
+- Buy is green, sell is red — on the side switch, the row and panel CTAs, side badges, and the trade-summary eyebrow.
+- The `sell` button variant is **solid**, distinct from the **tinted** `danger` used for Cancel and Dispute.
+- **Action buttons inside a trade stay `primary`.** On a sell at the release stage the buttons are "Release USDC" and "Raise dispute"; colouring the first red would put two reds side by side, one completing the trade and one escalating it. On the trade screen, red means destructive and nothing else.
 
 ---
 
-## 8. Known inconsistencies — fix these in the rebuild
+## 8. Decisions and open questions
 
-Carrying these forward would be a mistake. Each is small and worth resolving on day one.
+### Resolved from the original spec
 
-1. **Mixed languages.** UI copy is mostly English, but Spanish is hardcoded in `frontend/components/escrows/status-badge.tsx` (`Pendiente`, `Financiado`, `En disputa`, `Liberado`) and `app/transactions/page.tsx` (`Conecta tu wallet…`, `Cargando transacciones…`, `Anterior`, `Página`). Pick one language, or commit to real i18n.
-2. **Half-built i18n.** A `lang?: "es" | "en"` prop backed by per-component `translations` objects exists in `TransactionCard/utils/index.ts`, `PaymentBubble/utils/index.ts`, and `chat/chat-screen.tsx` — and nowhere else. Either adopt an i18n library or drop the prop.
-3. **Tokens bypassed.** `ui/Button/Button.variants.ts` (`ghost`, `danger`) and `escrows/status-badge.tsx` use raw `zinc-*`/`red-*`/`amber-*`/`blue-*`/`green-*` scales instead of semantic tokens, so they ignore the green-tinted theme. Define `warning`/`info`/`success` semantic tokens and route these through them.
-4. **Button can't take children** — `ui/Button/Button.tsx` renders a `label` prop. See the consequence in `ui/theme-toggle.tsx`, which hand-rolls a `<button>` with `buttonVariants()` to fit an icon.
-5. **Dead tokens.** `--color-spark` and most of the `ink`/`mint` scale in `app/globals.css` are declared but unreferenced anywhere in `app/` or `frontend/`. Either use them or trim to what ships.
-6. **Two competing folder conventions.** `frontend/components/ui/bottom-nav.tsx` (kebab-case, flat) sits beside `frontend/components/TransactionCard/TransactionCard.tsx` (PascalCase folder with `types/` and `utils/` subfolders). Pick one. Kebab-case files with co-located types is the more common Next.js convention.
-7. **`frontend/` directory** is non-standard and buys nothing (see §2). Alias defined in `tsconfig.json`, consumed in `components.json`.
+Each of these was a known flaw in the earlier app, fixed here on day one:
+
+1. **`frontend/` directory dropped** — components live at the repo root.
+2. **Button takes `children`** and has an `icon` size, so the theme toggle uses the real primitive instead of hand-rolling a native button.
+3. **All variants use semantic tokens** — no raw `zinc-*`/`red-*`/`amber-*` scales.
+4. **`success`/`warning`/`info` tokens defined**, which also gives `--color-spark` a job.
+5. **One folder convention** — kebab-case files with co-located types.
+6. **One language** — English throughout.
+
+### Deliberate divergences from the original spec
+
+| Spec said | We built | Why |
+|---|---|---|
+| Every screen `max-w-md`, mobile-first | Desktop-first, `max-w-[1400px]` | The order book is a dense table; the trade screen runs state and chat side by side |
+| `/` is a marketing landing | `/` is wallet connect | SafeSwap runs as a dApp; there is no credential flow and no marketing page |
+| Bottom navigation, 4 items | Sticky top header | Mobile nav does not fit a desktop layout, and its Home item has no target |
+| Trade detail at `/p2p/orders/[id]` | Inline expanding panel | Sizing a trade without leaving the book |
+| `localStorage` trade state excluded | Open orders persisted | Losing a trade in flight on navigation is worse than the coupling |
+| `EscrowStatus` has four states | Five, adding `cancelled` | An order dropped before the fiat leg reaches none of the other four |
+
+### Open questions
+
+- **i18n.** Copy is English and hardcoded. Adopting a library is undecided.
+- **Cancelled and disputed share a red.** They are the only two destructive states and currently look identical at a glance, though one needs action and one does not.
+- **Contrast.** Neither the brand-green nor the sell-red solid button clears 4.5:1 against white text. Inherited from the brand palette; fixing it means darkening both fills.
+- **Sorting controls.** The book always sorts by best price. The reference exposes a sort selector.
+- **`PaymentBubble`.** Inline payment and payment-request bubbles with Pay/Reject actions — the richest chat feature, still unbuilt.
 
 ---
 
 ## 9. Out of scope
 
-Deliberately excluded — leave clean seams and mock the data.
+Deliberately excluded. Every seam is a mocked async function that resolves after a beat, so pending states are honest.
 
-| Excluded | Source (do **not** port) | Seam to leave |
-|---|---|---|
-| Wallet connection (Freighter / `@stellar/freighter-api`) | `frontend/lib/wallet-context.tsx`, `frontend/lib/wallet-setup.ts` | A `useWallet()`-shaped hook returning `{ publicKey, signTransaction }`; stub `publicKey` with a constant address |
-| Escrow lifecycle (Trustless Work API) | `frontend/lib/escrow-{deployment,funding,release,dispute,balance,approve-milestone}.ts` | Async action handlers that resolve after a timeout and drive a status state machine |
-| Stellar SDK, Horizon, XDR signing | `frontend/lib/stellar-transaction.ts`, `lib/trustless-work.ts` | None — UI never touches these |
-| Supabase / persistence | `lib/supabase.ts` (currently unimported) | Local state or fixtures |
-| API routes, `TW_API_KEY` | `app/api/**` | None |
-| Escrow data fetching | `frontend/components/escrows/{client,use-escrows,adapters}.ts` | A hook returning a fixture array + `isLoading`/`error` |
-| `localStorage` trade state | `app/p2p/orders/page.tsx`, `app/trades/[id]/page.tsx` | None — treat as component state |
+| Excluded | Seam in this repo |
+|---|---|
+| Wallet connection (Freighter) | `mockConnectWallet()` in `auth/connect-wallet-button.tsx`; `CONNECTED_ADDRESS` in `lib/wallet.ts` is the stub public key everything reads |
+| Disconnect | `handleDisconnect()` in `wallet/wallet-menu.tsx` |
+| Escrow deployment | `handleSubmit()` in `p2p/order-trade-panel.tsx` |
+| Approve / release | `advance()` in `trade/trade-screen.tsx` |
+| Cancel (refund) | `cancelOrder()` in `trade/trade-screen.tsx` |
+| Dispute | `raiseDispute()` in `trade/trade-screen.tsx` |
+| Order persistence | `trade/open-orders-store.ts` — swap the localStorage layer |
+| Stellar SDK, Horizon, XDR signing | None — the UI never touches these |
+| API routes, Supabase | None |
 
-Chat, orders, and wallet balances are **already mocked** in the current codebase, so those fixtures port over directly (see the note under [Screens to rebuild](#screens-to-rebuild)).
+Order fixtures live in `p2p/mock-orders.ts`. The sized amount and chosen payment method travel from the book to the trade screen as **search params** — with no backend to create an order against, the URL is what carries the trade, which also makes trades linkable and refresh-safe.
 
-The status vocabularies the UI must render are worth fixing up front, since they drive the visual states:
+Status vocabularies the UI renders:
 
 ```ts
-type EscrowStatus       = "pending" | "funded" | "disputed" | "released";   // escrows/types.ts
-type EscrowStepStatus   = "completed" | "current" | "pending" | "disputed"; // trade/escrow-stepper.tsx
-type PaymentStatus      = "pending" | "completed" | "rejected";            // PaymentBubble/types/index.ts
-type DeliveryStatus     = "sent" | "delivered" | "read";                   // chat/types.ts
-type OrderMode          = "buy" | "sell";                                  // p2p/types.ts
+type EscrowStatus     = "pending" | "funded" | "disputed" | "released" | "cancelled";
+type EscrowStepStatus = "completed" | "current" | "pending" | "disputed";
+type OrderMode        = "buy" | "sell";
 ```
-
-Domain type definitions worth reading before modeling your own — they're UI-shaped and connector-free: `frontend/components/p2p/types.ts` (`P2POrder`), `frontend/components/chat/types.ts` (`ChatMessage`), `frontend/components/ui/transaction-list.tsx` (`Transaction`).
 
 ---
 
-## 10. Rebuild checklist
+## 10. What's next
 
-Each step names the file to copy from, relative to `/Users/danielcdz/Repos/SafeSwap/p2p-safe-swap/`.
-
-- [ ] `create-next-app` — TypeScript, App Router, Tailwind v4 → compare `package.json`, `postcss.config.mjs`, `tsconfig.json`
-- [ ] Copy `app/fonts/Satoshi-Variable.woff2` **and** `app/fonts/SATOSHI-LICENSE.txt`; wire `next/font/local` per `app/layout.tsx`
-- [ ] Port `app/globals.css` in full — `@theme inline`, `:root`/`.dark`, `.text-grad`, scrollbar
-- [ ] Add `cn()` helper ← `lib/utils.ts`
-- [ ] `next-themes` provider + `suppressHydrationWarning` ← `app/layout.tsx`, `frontend/components/theme-provider.tsx`
-- [ ] Copy `ShieldMark` SVG paths verbatim ← `frontend/components/brand/Logo.tsx`
-- [ ] Button primitive — **with `children` and semantic tokens** (fixes #3, #4) ← `frontend/components/ui/Button/Button.variants.ts`
-- [ ] Primitives ← `frontend/components/ui/`: `wallet-badge`, `tab-bar`, `search-bar`, `date-group`, `theme-toggle`
-- [ ] AppShell + BottomNav ← `frontend/components/app-shell.tsx`, `ui/bottom-nav.tsx`
-- [ ] Domain components ← `TransactionCard/`, `p2p/best-price-card.tsx`, `trade/escrow-stepper.tsx`, `escrows/status-badge.tsx`
-- [ ] Chat surface ← `frontend/components/chat/*` + `PaymentBubble/PaymentBubble.tsx`
-- [ ] `Reveal` wrapper with reduced-motion handling ← `frontend/components/motion/reveal.tsx`
-- [ ] Screens in order: landing → orders → wallet → transactions → trade → chat ← `app/*/page.tsx`
-- [ ] Decide language/i18n policy before writing copy (#1, #2)
-- [ ] Verify both themes on every screen; check contrast on `muted-foreground` over `background`
+- [ ] `/wallet` — balance card, quick actions, recent activity
+- [ ] `/transactions` — searchable, tabbed, day-grouped history
+- [ ] `PaymentBubble` — inline payment and request bubbles in chat
+- [ ] Navigation items in the header, once there is more than one destination
+- [ ] `/escrow/[id]/admin` — dispute resolver form, internal-facing
+- [ ] Decide the i18n policy before more copy accumulates
+- [ ] Verify both themes on every new screen; check contrast on `muted-foreground` over `background`
