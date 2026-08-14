@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { X } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TabBar } from "@/components/ui/tab-bar";
 import { EscrowStatusBadge } from "@/components/trade/escrow-status-badge";
@@ -11,7 +11,9 @@ import { buildTrade } from "@/components/trade/build-trade";
 import {
   removeOpenOrder,
   setOpenOrderStatus,
+  setOrdersCollapsed,
   useOpenOrders,
+  useOrdersCollapsed,
 } from "@/components/trade/open-orders-store";
 import type { EscrowStatus } from "@/components/trade/types";
 import { cn } from "@/lib/utils";
@@ -36,9 +38,11 @@ function isOpen(status: EscrowStatus) {
  */
 export function OpenOrders() {
   const orders = useOpenOrders();
+  const collapsed = useOrdersCollapsed();
   const [tabIndex, setTabIndex] = React.useState(0);
   const [confirming, setConfirming] = React.useState<string | null>(null);
 
+  const bodyId = React.useId();
   const showingOpen = tabIndex === 0;
 
   const all = orders.flatMap((record) => {
@@ -50,6 +54,7 @@ export function OpenOrders() {
   });
 
   const rows = all.filter(({ record }) => isOpen(record.status) === showingOpen);
+  const openCount = all.filter(({ record }) => isOpen(record.status)).length;
   const confirmingRow = all.find((row) => row.record.orderId === confirming);
 
   function closeOrder(orderId: string, status: EscrowStatus) {
@@ -76,89 +81,120 @@ export function OpenOrders() {
       aria-label="Your orders"
       className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3 px-5 py-3",
+          !collapsed && "border-b border-border",
+        )}
+      >
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-sm font-semibold">Your orders</h2>
-          <TabBar
-            size="sm"
-            tabs={["Open", "Past"]}
-            activeIndex={tabIndex}
-            onChange={setTabIndex}
-          />
+          {!collapsed ? (
+            <TabBar
+              size="sm"
+              tabs={["Open", "Past"]}
+              activeIndex={tabIndex}
+              onChange={setTabIndex}
+            />
+          ) : null}
         </div>
-        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary tabular-nums">
-          {rows.length} {showingOpen ? "active" : "closed"}
-        </span>
+
+        <div className="flex items-center gap-2">
+          {/* Collapsed, the count is the only clue to what's hidden, so it
+              reports what's still in flight rather than the active tab. */}
+          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary tabular-nums">
+            {collapsed
+              ? `${openCount} open`
+              : `${rows.length} ${showingOpen ? "active" : "closed"}`}
+          </span>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={!collapsed}
+            aria-controls={bodyId}
+            onClick={() => setOrdersCollapsed(!collapsed)}
+          >
+            {collapsed ? "Show" : "Hide"}
+            {collapsed ? (
+              <ChevronDown aria-hidden className="size-4" />
+            ) : (
+              <ChevronUp aria-hidden className="size-4" />
+            )}
+          </Button>
+        </div>
       </div>
 
-      {rows.length > 0 ? (
-        <ul className="divide-y divide-border">
-          {rows.map(({ record, trade }) => {
-            const cancellable = record.status === "pending";
-            const href = `/trades/${record.orderId}?amount=${record.amount}&method=${encodeURIComponent(record.method)}`;
+      <div id={bodyId} hidden={collapsed}>
+        {rows.length > 0 ? (
+          <ul className="divide-y divide-border">
+            {rows.map(({ record, trade }) => {
+              const cancellable = record.status === "pending";
+              const href = `/trades/${record.orderId}?amount=${record.amount}&method=${encodeURIComponent(record.method)}`;
 
-            return (
-              <li
-                key={record.orderId}
-                className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-3.5"
-              >
-                <span
-                  className={cn(
-                    "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                    SIDE_TONE[trade.mode].pill,
-                  )}
+              return (
+                <li
+                  key={record.orderId}
+                  className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-3.5"
                 >
-                  {SIDE_TONE[trade.mode].label}
-                </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                      SIDE_TONE[trade.mode].pill,
+                    )}
+                  >
+                    {SIDE_TONE[trade.mode].label}
+                  </span>
 
-                <div className="flex min-w-40 flex-1 flex-col">
-                  <span className="text-sm font-semibold tabular-nums">
-                    {formatFiat(trade.fiatAmount)}
-                    <span className="font-normal text-muted-foreground">
-                      {" · "}
-                      {formatAsset(trade.assetAmount)} {MARKET.asset}
+                  <div className="flex min-w-40 flex-1 flex-col">
+                    <span className="text-sm font-semibold tabular-nums">
+                      {formatFiat(trade.fiatAmount)}
+                      <span className="font-normal text-muted-foreground">
+                        {" · "}
+                        {formatAsset(trade.assetAmount)} {MARKET.asset}
+                      </span>
                     </span>
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {trade.counterparty.nickname} · {trade.paymentMethod}
-                  </span>
-                </div>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {trade.counterparty.nickname} · {trade.paymentMethod}
+                    </span>
+                  </div>
 
-                <EscrowStatusBadge status={record.status} />
+                  <EscrowStatusBadge status={record.status} />
 
-                <Link
-                  href={href}
-                  className={cn(buttonVariants({ size: "sm" }), "min-w-20")}
-                >
-                  {showingOpen ? "Resume" : "View"}
-                </Link>
+                  <Link
+                    href={href}
+                    className={cn(buttonVariants({ size: "sm" }), "min-w-20")}
+                  >
+                    {showingOpen ? "Resume" : "View"}
+                  </Link>
 
-                <button
-                  type="button"
-                  aria-label={
-                    cancellable
-                      ? `Cancel order with ${trade.counterparty.nickname}`
-                      : `Remove order with ${trade.counterparty.nickname} from this list`
-                  }
-                  title={cancellable ? "Cancel order" : "Remove from list"}
-                  onClick={() => closeOrder(record.orderId, record.status)}
-                  className="grid size-7 cursor-pointer place-items-center rounded-full text-destructive transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
-                >
-                  <X aria-hidden className="size-4" />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <div className="p-5">
-          <p className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
-            {showingOpen
-              ? "No orders in flight. Open one from the book below."
-              : "Nothing closed yet."}
-          </p>
-        </div>
-      )}
+                  <button
+                    type="button"
+                    aria-label={
+                      cancellable
+                        ? `Cancel order with ${trade.counterparty.nickname}`
+                        : `Remove order with ${trade.counterparty.nickname} from this list`
+                    }
+                    title={cancellable ? "Cancel order" : "Remove from list"}
+                    onClick={() => closeOrder(record.orderId, record.status)}
+                    className="grid size-7 cursor-pointer place-items-center rounded-full text-destructive transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+                  >
+                    <X aria-hidden className="size-4" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="p-5">
+            <p className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
+              {showingOpen
+                ? "No orders in flight. Open one from the book below."
+                : "Nothing closed yet."}
+            </p>
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         open={confirmingRow !== undefined}
