@@ -31,6 +31,8 @@ export interface P2POrder {
   /** Payment window, minutes. */
   windowMinutes: number;
   paymentMethods: string[];
+  /** Free text the trader sets — conditions they expect you to follow. */
+  terms: string;
 }
 
 /** MVP scope: a single market. The asset chip states it rather than

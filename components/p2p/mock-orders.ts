@@ -22,6 +22,8 @@ export const MOCK_ORDERS: P2POrder[] = [
     limits: { min: 50, max: 3000 },
     windowMinutes: 15,
     paymentMethods: ["Zelle", "BAC Credomatic"],
+    terms:
+      "Payment must come from an account in your own name — third-party transfers are rejected. Send the exact amount and include the reference shown in chat.",
   },
   {
     id: "ord-anaswaps",
@@ -39,6 +41,8 @@ export const MOCK_ORDERS: P2POrder[] = [
     limits: { min: 20, max: 1200 },
     windowMinutes: 15,
     paymentMethods: ["Zelle"],
+    terms:
+      "Zelle only, same-name accounts. Please mark the payment as a personal transfer, not a purchase.",
   },
   {
     id: "ord-puravidap2p",
@@ -56,6 +60,8 @@ export const MOCK_ORDERS: P2POrder[] = [
     limits: { min: 100, max: 5000 },
     windowMinutes: 30,
     paymentMethods: ["Banco Nacional", "BAC Credomatic", "Wise"],
+    terms:
+      "Bank transfers processed on business days, 8am–6pm. For orders above $1,000 I may ask for a quick ID check before releasing.",
   },
   {
     id: "ord-chepetrader",
@@ -69,10 +75,12 @@ export const MOCK_ORDERS: P2POrder[] = [
       completionRate: 95.2,
     },
     price: 1.008,
-    available: 640.0,
+    available: 180.0,
     limits: { min: 10, max: 400 },
     windowMinutes: 10,
     paymentMethods: ["Zelle"],
+    terms:
+      "Small orders welcome. Confirm in chat before sending so I can check my remaining balance.",
   },
   {
     id: "ord-ticocambios",
@@ -90,6 +98,8 @@ export const MOCK_ORDERS: P2POrder[] = [
     limits: { min: 200, max: 4000 },
     windowMinutes: 20,
     paymentMethods: ["Scotiabank", "Banco Nacional"],
+    terms:
+      "Transfers accepted from Costa Rican banks only. Include your order reference in the transfer detail.",
   },
   {
     id: "ord-monteverdex",
@@ -107,6 +117,8 @@ export const MOCK_ORDERS: P2POrder[] = [
     limits: { min: 50, max: 5000 },
     windowMinutes: 15,
     paymentMethods: ["Zelle", "Banco Nacional"],
+    terms:
+      "I release within minutes during business hours. Send from an account in your own name.",
   },
   {
     id: "ord-swiftusd",
@@ -124,6 +136,8 @@ export const MOCK_ORDERS: P2POrder[] = [
     limits: { min: 40, max: 1800 },
     windowMinutes: 20,
     paymentMethods: ["BAC Credomatic"],
+    terms:
+      "BAC transfers only. Please do not mention crypto in the transfer note.",
   },
   {
     id: "ord-natiusdc",
@@ -141,6 +155,8 @@ export const MOCK_ORDERS: P2POrder[] = [
     limits: { min: 30, max: 2400 },
     windowMinutes: 15,
     paymentMethods: ["Wise", "Scotiabank"],
+    terms:
+      "Wise or Scotiabank. The payment must match the exact amount — partial payments are returned.",
   },
   {
     id: "ord-dollarking",
@@ -158,6 +174,8 @@ export const MOCK_ORDERS: P2POrder[] = [
     limits: { min: 10, max: 500 },
     windowMinutes: 10,
     paymentMethods: ["Zelle"],
+    terms:
+      "Zelle only. Message me in chat before opening the order so I can confirm I am online.",
   },
   {
     id: "ord-caribeexchange",
@@ -175,6 +193,8 @@ export const MOCK_ORDERS: P2POrder[] = [
     limits: { min: 200, max: 10000 },
     windowMinutes: 30,
     paymentMethods: ["Banco Nacional", "Wise", "BAC Credomatic"],
+    terms:
+      "High volume welcome. For orders above $5,000 message me first to confirm availability.",
   },
 ];
 

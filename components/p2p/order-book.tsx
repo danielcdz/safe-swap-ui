@@ -41,6 +41,8 @@ export function OrderBook() {
   const [modeIndex, setModeIndex] = React.useState(0);
   const [amount, setAmount] = React.useState("");
   const [method, setMethod] = React.useState<string>(ALL_METHODS);
+  // Only one trade panel is open at a time, so the state lives here.
+  const [openId, setOpenId] = React.useState<string | null>(null);
 
   const mode = MODES[modeIndex];
   const hasFilters = amount.trim() !== "" || method !== ALL_METHODS;
@@ -71,9 +73,27 @@ export function OrderBook() {
       )
     : null;
 
+  // Any change to what's listed collapses the open panel — leaving it open
+  // would resurface a half-filled form for an offer that scrolled away.
+  function changeMode(index: number) {
+    setModeIndex(index);
+    setOpenId(null);
+  }
+
+  function changeAmount(value: string) {
+    setAmount(value);
+    setOpenId(null);
+  }
+
+  function changeMethod(value: string) {
+    setMethod(value);
+    setOpenId(null);
+  }
+
   function clearFilters() {
     setAmount("");
     setMethod(ALL_METHODS);
+    setOpenId(null);
   }
 
   return (
@@ -84,7 +104,7 @@ export function OrderBook() {
           <TabBar
             tabs={["Buy", "Sell"]}
             activeIndex={modeIndex}
-            onChange={setModeIndex}
+            onChange={changeMode}
           />
 
           {/* MVP is a single market — the chip states it instead of offering
@@ -108,7 +128,7 @@ export function OrderBook() {
             <input
               inputMode="numeric"
               value={amount}
-              onChange={(event) => setAmount(event.target.value)}
+              onChange={(event) => changeAmount(event.target.value)}
               placeholder="Amount"
               aria-label={`Filter by transaction amount in ${MARKET.fiat}`}
               className="w-28 bg-transparent text-sm text-foreground tabular-nums outline-none placeholder:text-muted-foreground"
@@ -118,7 +138,7 @@ export function OrderBook() {
           <div className="relative">
             <select
               value={method}
-              onChange={(event) => setMethod(event.target.value)}
+              onChange={(event) => changeMethod(event.target.value)}
               aria-label="Filter by payment method"
               className="cursor-pointer appearance-none rounded-full bg-primary/5 py-2 ps-4 pe-9 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
@@ -179,7 +199,16 @@ export function OrderBook() {
         {orders.length > 0 ? (
           <div className="divide-y divide-border">
             {orders.map((order) => (
-              <OrderRow key={order.id} order={order} />
+              <OrderRow
+                key={order.id}
+                order={order}
+                open={order.id === openId}
+                onToggle={() =>
+                  setOpenId((current) =>
+                    current === order.id ? null : order.id,
+                  )
+                }
+              />
             ))}
           </div>
         ) : (
