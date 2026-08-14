@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* Semantic tokens (theme-aware, defined per :root / .dark below) */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chat-bubble-outgoing: var(--chat-bubble-outgoing);
+  --color-chat-bubble-outgoing-foreground: var(--chat-bubble-outgoing-foreground);
+
+  /* Brand typeface (Satoshi, self-hosted via next/font in layout.tsx) */
+  --font-sans: var(--font-satoshi), ui-sans-serif, system-ui, sans-serif;
+
+  /* Raw brand palette (SafeSwap Visual Identity) — theme-independent */
+  --color-ink: #101b1d;
+  --color-ink-deep: #0a1213;
+  --color-ink-700: #16282a;
+  --color-green: #01a78f;
+  --color-green-dark: #016b5b;
+  --color-green-deep: #02201a;
+  --color-mint: #5fd6ac;
+  --color-mint-soft: #9ce7cc;
+  --color-mint-pale: #e6fbf2;
+  --color-spark: #1446f0;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Light theme — brand green-neutral surfaces, Ink text */
+:root {
+  --background: #f5fcf9;
+  --foreground: #101b1d;
+  --card: #ffffff;
+  --card-foreground: #101b1d;
+  --popover: #ffffff;
+  --popover-foreground: #101b1d;
+  --primary: #01a78f;
+  --primary-foreground: #ffffff;
+  --secondary: #5fd6ac;
+  --secondary-foreground: #101b1d;
+  --muted: #ebf4f0;
+  --muted-foreground: #54615b;
+  --accent: #e6fbf2;
+  --accent-foreground: #016b5b;
+  --destructive: #ff5957;
+  --border: #d2ded8;
+  --input: #d2ded8;
+  --ring: #01a78f;
+  --chat-bubble-outgoing: #02201a;
+  --chat-bubble-outgoing-foreground: #e6fbf2;
+  --radius: 0.75rem;
+
+  /* Ambient field — soft brand light bleeding into the canvas */
+  --aurora-a: rgb(1 167 143 / 0.14);
+  --aurora-b: rgb(95 214 172 / 0.22);
+  --aurora-c: rgb(1 167 143 / 0.08);
+  --grain-opacity: 0.035;
+}
+
+/* Dark theme — mirrors the SafeSwap Landing (Ink canvas, mint accents) */
+.dark {
+  --background: #0a1213;
+  --foreground: #e6fbf2;
+  --card: #101b1d;
+  --card-foreground: #e6fbf2;
+  --popover: #101b1d;
+  --popover-foreground: #e6fbf2;
+  --primary: #01a78f;
+  --primary-foreground: #ffffff;
+  --secondary: #5fd6ac;
+  --secondary-foreground: #101b1d;
+  --muted: #16282a;
+  --muted-foreground: #7f9a93;
+  --accent: #16282a;
+  --accent-foreground: #e6fbf2;
+  --destructive: #ff5957;
+  --border: #1c2e2c;
+  --input: #1c2e2c;
+  --ring: #5fd6ac;
+  --chat-bubble-outgoing: #016b5b;
+  --chat-bubble-outgoing-foreground: #e6fbf2;
+
+  --aurora-a: rgb(1 167 143 / 0.22);
+  --aurora-b: rgb(95 214 172 / 0.10);
+  --aurora-c: rgb(1 107 91 / 0.24);
+  --grain-opacity: 0.05;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  /* Brand gradient text (Persian Green → Mint) */
+  .text-grad {
+    background: linear-gradient(100deg, #5fd6ac 0%, #01a78f 55%, #5fd6ac 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Ambient brand light. Three offset radials so the canvas has depth
+     instead of reading as a flat fill. Intensity is theme-tuned above. */
+  .bg-aurora {
+    background-image:
+      radial-gradient(58% 42% at 12% -8%, var(--aurora-a) 0%, transparent 72%),
+      radial-gradient(48% 38% at 96% 2%, var(--aurora-b) 0%, transparent 72%),
+      radial-gradient(76% 46% at 50% 110%, var(--aurora-c) 0%, transparent 72%);
+  }
+
+  /* Fine film grain, keeps large flat areas from banding. */
+  .bg-grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+/* Slow pulse behind the brand mark — the "vault is live" signal. */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.09);
+    opacity: 0.85;
+  }
+}
+
+.animate-breathe {
+  animation: breathe 5.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-breathe {
+    animation: none;
+  }
+}
+
+/* Themed scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #01a78f, #016b5b);
+  border-radius: 999px;
+  border: 2px solid var(--background);
+}
