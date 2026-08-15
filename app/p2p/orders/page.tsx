@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { AppHeader } from "@/components/app-header";
-import { MyAds } from "@/components/ads/my-ads";
-import { OpenOrders } from "@/components/p2p/open-orders";
+import { ActivitySummary } from "@/components/p2p/activity-summary";
 import { OrderBook } from "@/components/p2p/order-book";
 import { MARKET } from "@/components/p2p/types";
 
@@ -26,8 +25,7 @@ export default function OrdersPage() {
         </div>
 
         <div className="flex flex-col gap-6">
-          <OpenOrders />
-          <MyAds />
+          <ActivitySummary />
           <OrderBook />
         </div>
       </main>

@@ -104,45 +104,9 @@ export function useOpenOrders() {
   );
 }
 
-/* -- Collapsed preference -------------------------------------------------
- * Kept next to the orders themselves and persisted the same way: this app
- * bounces between the book and a trade constantly, and a collapse that reset
- * on every return would be worse than not having one.
- */
+/** Which statuses count as still in flight. Shared by the panel and summary. */
+export const OPEN_STATUSES: EscrowStatus[] = ["pending", "funded", "disputed"];
 
-const COLLAPSE_KEY = "safeswap:orders-collapsed";
-const collapseListeners = new Set<() => void>();
-let collapsed = false;
-
-if (typeof window !== "undefined") {
-  try {
-    collapsed = window.localStorage.getItem(COLLAPSE_KEY) === "true";
-  } catch {
-    collapsed = false;
-  }
-}
-
-function subscribeCollapsed(listener: () => void) {
-  collapseListeners.add(listener);
-  return () => {
-    collapseListeners.delete(listener);
-  };
-}
-
-export function setOrdersCollapsed(next: boolean) {
-  collapsed = next;
-  try {
-    window.localStorage.setItem(COLLAPSE_KEY, String(next));
-  } catch {
-    // Preference simply won't survive a reload.
-  }
-  for (const listener of collapseListeners) listener();
-}
-
-export function useOrdersCollapsed() {
-  return React.useSyncExternalStore(
-    subscribeCollapsed,
-    () => collapsed,
-    () => false,
-  );
+export function isOpenStatus(status: EscrowStatus) {
+  return OPEN_STATUSES.includes(status);
 }
