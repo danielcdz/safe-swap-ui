@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { Wordmark } from "@/components/brand/logo";
+import { buttonVariants } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { WalletMenu } from "@/components/wallet/wallet-menu";
 
@@ -22,7 +24,14 @@ export function AppHeader() {
           <Wordmark />
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href="/p2p/ads/new"
+            className={buttonVariants({ variant: "ghost", size: "sm" })}
+          >
+            <Plus aria-hidden className="size-4" />
+            <span className="hidden sm:inline">Post ad</span>
+          </Link>
           <WalletMenu />
           <ThemeToggle />
         </div>
