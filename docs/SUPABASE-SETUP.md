@@ -1,5 +1,8 @@
 # Supabase setup
 
+How to connect. For what is actually in the database and why, see
+[`SUPABASE-SCHEMA.md`](./SUPABASE-SCHEMA.md).
+
 ## Connecting the MCP server
 
 `.mcp.json` in the repo root declares the Supabase MCP server. It holds **no
