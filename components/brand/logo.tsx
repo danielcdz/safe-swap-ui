@@ -3,6 +3,9 @@
  * Identity guide (shield + bi-directional arrows forming an "S"). The two-tone
  * brand fills are intentionally fixed hex so the mark stays on-brand in any
  * theme; only the wordmark text follows the theme foreground.
+ *
+ * The same paths back the browser tab icon in `app/icon.svg` — change one and
+ * change the other.
  */
 
 export function ShieldMark({ className = "" }: { className?: string }) {
