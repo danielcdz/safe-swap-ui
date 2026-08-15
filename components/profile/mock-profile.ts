@@ -10,7 +10,6 @@ import { CONNECTED_ADDRESS } from "@/lib/wallet";
 export const PROFILE = {
   nickname: "TicoSwapper",
   address: CONNECTED_ADDRESS,
-  verified: true,
   joinedAt: "2025-03-14",
   rating: 4.91,
   totalTrades: 184,

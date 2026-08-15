@@ -1,12 +1,29 @@
 "use client";
 
 import * as React from "react";
-import { BadgeCheck, Check, Copy, Star } from "lucide-react";
+import {
+  BadgeCheck,
+  Check,
+  Copy,
+  Pencil,
+  ShieldCheck,
+  Star,
+  X,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { WalletBadge } from "@/components/ui/wallet-badge";
 import { MARKET } from "@/components/p2p/types";
 import { formatAsset, truncateAddress } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { joinedLabel, PROFILE } from "./mock-profile";
+import { setNickname, useNickname, validateNickname } from "./profile-store";
+import { VerificationDialog } from "./verification-dialog";
+import {
+  isVerified,
+  useVerification,
+  VERIFICATION_METHODS,
+  verifiedCount,
+} from "./verification";
 
 function Metric({
   label,
@@ -45,7 +62,33 @@ function Metric({
 }
 
 export function ProfileScreen() {
+  const nickname = useNickname();
+  const statuses = useVerification();
+  const verified = isVerified(statuses);
+  const [verifyOpen, setVerifyOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(nickname);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const draftError = validateNickname(draft);
+
+  // Focusing is not state, so it is safe to do from an effect.
+  React.useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  function startEditing() {
+    setDraft(nickname);
+    setEditing(true);
+  }
+
+  function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (draftError) return;
+    setNickname(draft.trim());
+    setEditing(false);
+  }
 
   async function copyAddress() {
     await navigator.clipboard.writeText(PROFILE.address);
@@ -66,17 +109,69 @@ export function ProfileScreen() {
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">
-              {PROFILE.nickname}
-            </h1>
-            {PROFILE.verified ? (
-              <BadgeCheck
-                className="size-5 shrink-0 text-primary"
-                aria-label="Verified trader"
-              />
-            ) : null}
-          </div>
+          {editing ? (
+            <form onSubmit={save} className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={inputRef}
+                  value={draft}
+                  maxLength={20}
+                  aria-label="Nickname"
+                  aria-invalid={draftError ? true : undefined}
+                  aria-describedby={draftError ? "nickname-error" : undefined}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setEditing(false);
+                  }}
+                  className={cn(
+                    "w-full max-w-64 rounded-full bg-primary/5 px-4 py-1.5 text-lg font-semibold outline-none",
+                    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+                    draftError && "ring-1 ring-destructive/45 ring-inset",
+                  )}
+                />
+                <Button type="submit" size="sm" disabled={Boolean(draftError)}>
+                  Save
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEditing(false)}
+                >
+                  <X aria-hidden className="size-4" />
+                  Cancel
+                </Button>
+              </div>
+              {draftError ? (
+                <p
+                  id="nickname-error"
+                  role="alert"
+                  className="text-xs text-destructive"
+                >
+                  {draftError}
+                </p>
+              ) : null}
+            </form>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight">{nickname}</h1>
+              {verified ? (
+                <BadgeCheck
+                  className="size-5 shrink-0 text-primary"
+                  aria-label="Verified trader"
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={startEditing}
+                aria-label="Edit nickname"
+                title="Edit nickname"
+                className="grid size-7 cursor-pointer place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-hidden"
+              >
+                <Pencil aria-hidden className="size-4" />
+              </button>
+            </div>
+          )}
 
           <button
             type="button"
@@ -103,17 +198,28 @@ export function ProfileScreen() {
           </span>
         </div>
 
-        {PROFILE.verified ? (
-          <span
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
-              "border-success/30 bg-success/10 text-success",
-            )}
-          >
-            <BadgeCheck aria-hidden className="size-3.5" />
-            Verified
-          </span>
-        ) : null}
+        <Button
+          variant={verified ? "ghost" : "primary"}
+          size="sm"
+          className={cn(
+            "shrink-0",
+            verified && "border-success/30 bg-success/10 text-success hover:bg-success/15",
+          )}
+          onClick={() => setVerifyOpen(true)}
+        >
+          {verified ? (
+            <>
+              <BadgeCheck aria-hidden className="size-4" />
+              Verified
+            </>
+          ) : (
+            <>
+              <ShieldCheck aria-hidden className="size-4" />
+              Get verified · {verifiedCount(statuses)}/
+              {VERIFICATION_METHODS.length}
+            </>
+          )}
+        </Button>
       </section>
 
       {/* Record */}
@@ -159,6 +265,11 @@ export function ProfileScreen() {
           hint="Across all counterparties"
         />
       </section>
+
+      <VerificationDialog
+        open={verifyOpen}
+        onDismiss={() => setVerifyOpen(false)}
+      />
     </main>
   );
 }

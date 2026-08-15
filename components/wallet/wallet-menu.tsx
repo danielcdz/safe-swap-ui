@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { WalletBadge } from "@/components/ui/wallet-badge";
 import { truncateAddress } from "@/lib/format";
+import { useNickname } from "@/components/profile/profile-store";
 import { CONNECTED_ADDRESS } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
  */
 export function WalletMenu() {
   const router = useRouter();
+  const nickname = useNickname();
   const [open, setOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
@@ -168,12 +170,15 @@ export function WalletMenu() {
               className="size-8"
             />
             <div className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate font-mono text-xs">
-                {truncateAddress(CONNECTED_ADDRESS, 6, 6)}
+              <span className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                {nickname}
+                <span
+                  aria-label="Connected"
+                  className="size-1.5 shrink-0 rounded-full bg-primary"
+                />
               </span>
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span aria-hidden className="size-1.5 rounded-full bg-primary" />
-                Connected
+              <span className="truncate font-mono text-xs text-muted-foreground">
+                {truncateAddress(CONNECTED_ADDRESS, 6, 6)}
               </span>
             </div>
           </div>
