@@ -63,11 +63,25 @@ Three consequences for the interface, and they are the reason it looks the way i
 | Route | File | Status |
 |---|---|---|
 | `/` | `app/page.tsx` | **Built** — wallet connect. The front door; there is no marketing landing |
-| `/p2p/orders` | `app/p2p/orders/page.tsx` | **Built** — order book, your orders, inline trade panel |
+| `/p2p/orders` | `app/p2p/orders/page.tsx` | **Built** — the book, plus a high-level activity summary |
+| `/p2p/ads/new` | `app/p2p/ads/new/page.tsx` | **Built** — three-step ad wizard |
 | `/trades/[id]` | `app/trades/[id]/page.tsx` | **Built** — escrow state + chat |
+| `/dashboard` | `app/dashboard/page.tsx` | **Built** — your orders and ads, in full |
+| `/profile` | `app/profile/page.tsx` | **Built** — identity and trading record |
 | `/wallet` | — | Not built — balance, quick actions, recent activity |
 | `/transactions` | — | Not built — full history, searchable + tabbed |
 | `/escrow/[id]/admin` | — | Not built — dispute resolver form, internal-facing |
+
+### Information architecture
+
+**Market** finds a counterparty, **Dashboard** holds what's yours, the trade
+screen sits between them, and **Profile** is who you are to everyone else.
+
+The book carries only a high-level read of your activity — open orders, live
+ads, and disputes when non-zero — and hands off. Rows, tabs, and actions live
+in the dashboard. That split exists because the book is a place you scan for
+someone to trade with; your own state competing for the same screen made both
+harder to read.
 
 **Market scope: USDC/USD only.** A single market, stated by a chip rather than offered as a selector. Payment rails are the ones that settle in dollars: Zelle, Wise, and Costa Rican banks that hold USD accounts (BAC Credomatic, Banco Nacional, Scotiabank). Colón rails such as SINPE Móvil would be a second market, not a payment method on this one.
 
@@ -240,10 +254,12 @@ Two rules worth enforcing:
 
 - `sticky top-0 z-40`, `border-b border-border`, `bg-background/85 backdrop-blur`
 - `h-16`, inner container `max-w-[1400px]` with `px-4 sm:px-6`
-- Left: wordmark, linking to the order book
-- Right: `WalletMenu` then `ThemeToggle`
+- Left: wordmark, then `AppNav` — Market and Dashboard, prefix-matched so a trade or the ad form keeps its section lit. Hidden below `sm`.
+- Right: a **Post ad** link, `WalletMenu`, `ThemeToggle`
 
-**There is no bottom navigation.** The earlier app's four-item mobile nav (Home / Orders / Wallet / Transactions) does not fit a desktop layout, and its Home item has no target now that `/` is the connect screen. Navigation items belong in this header as the remaining screens land.
+**There is no bottom navigation.** The earlier app's four-item mobile nav (Home / Orders / Wallet / Transactions) does not fit a desktop layout, and its Home item has no target now that `/` is the connect screen.
+
+**The wallet menu doubles as the user menu** — Profile, Dashboard, Copy address, Disconnect. Identity first, then your things, then utilities, then the way out. It is also what makes `AppNav` being hidden on small screens safe: every destination stays reachable there.
 
 ### Page container
 
@@ -271,6 +287,7 @@ All paths under `components/`.
 | **InfoTip** (`ui/info-tip.tsx`) | `(i)` affordance. Opens on hover, focus, **and tap** — pointer-only tooltips are unreachable by keyboard and invisible on touch. `role="tooltip"` + `aria-describedby`; Escape and blur dismiss. Resets inherited uppercase/tracking. |
 | **ConfirmDialog** (`ui/confirm-dialog.tsx`) | Modal for irreversible actions. `role="dialog" aria-modal`, Escape and backdrop press dismiss, focus moves to the confirm button on open and returns to the opener on close, body scroll locked. |
 | **ThemeToggle** (`ui/theme-toggle.tsx`) | Sun/Moon swap on the `Button` primitive at `size="icon"`. Uses `useSyncExternalStore` for a hydration-safe mounted flag. |
+| **NumberField** (`ui/number-field.tsx`) | Pill number input with −/+ steppers. Typing stays free-form so a half-entered value isn't clamped out from under the cursor; the steppers clamp and the parent validates. |
 | **TextField** (`ui/text-field.tsx`) | Pill input following the search-bar shape language — `rounded-full` on a `primary/5` wash, ring on focus, leading icon, trailing slot, inline error wired through `aria-invalid`/`aria-describedby`. **Currently unused**; kept for the amount-entry, dispute, and admin forms still to come. |
 
 ### Brand — `brand/logo.tsx`
@@ -292,7 +309,7 @@ All paths under `components/`.
 | **OrderRow** (`p2p/order-row.tsx`) | One offer. Grid columns Advertiser / Price / Available–Limits / Payment / Trade, locked to the header by the exported `ORDER_GRID` constant. Stacks with inline labels below `lg`. The advertiser cell carries the trust block. Expands into the trade panel. |
 | **OrderTradePanel** (`p2p/order-trade-panel.tsx`) | Inline trade form. Trader's terms left, sizing right. See [§5.1](#51-the-amount-clamp). |
 | **MarketStats** (`p2p/market-stats.tsx`) | Best price / offers / average release, computed from the **visible** rows so the headline price is always actionable. |
-| **OpenOrders** (`p2p/open-orders.tsx`) | Your trades, above the book. Open/Past switch, contextual counts, Resume vs View, collapse toggle, per-row cancel. |
+| **ActivitySummary** (`p2p/activity-summary.tsx`) | The book's only view of your own state: open orders, live ads, disputes when non-zero, and a link to the dashboard. Renders nothing when there is no activity. |
 | **SIDE_TONE** (`p2p/side.ts`) | The one map deciding that **buy is green and sell is red** — label, button variant, tab tone, pill tint, text colour. Every side-stating surface reads from it. |
 
 The panel is one `rounded-2xl` card with `divide-y` rows rather than a stack of separate cards: it keeps the density of a table inside the card language.
@@ -333,6 +350,48 @@ Semantics:
 - **The trade screen seeds from the stored record.** Stored status sets a floor (`pending`→2, `funded`/`disputed`→3, `released`→4); session actions can only move it forward. Without this, Resume would reopen a cancelled order as live.
 
 Statuses split into Open (`pending`, `funded`, `disputed`) and Past (`released`, `cancelled`). **A dispute counts as open** — it is unresolved and needs action; filing it under history would bury the trade that most needs attention.
+
+### Ads — `ads/`
+
+| Component | Notes |
+|---|---|
+| **PostAdScreen** (`ads/post-ad-screen.tsx`) | Three-step wizard: type & price, amount & payment, terms & auto-reply. Asset and fiat are static chips, not selectors — single market, and an `InfoTip` says so rather than offering a dropdown that leads nowhere. |
+| **pricing** (`ads/pricing.ts`) | Mid-market from the two best prices in the book, ±5% price bounds, and the direction-aware competing benchmark. |
+| **ads-store** (`ads/ads-store.ts`) | Published ads, same external-store shape as open orders. `publishAd()` takes a draft and assigns the id and timestamp itself — reading the clock in a component body is impure, and record identity belongs to the store. |
+
+#### 5.3 An ad's side is the inverse of its book tab
+
+The single easiest thing to get silently wrong here.
+
+`P2POrder.mode` is **the side the viewer takes**. An *"I want to sell"* ad is therefore what a viewer **buys** from, and lists under **Buy**. Reverse it and every published ad lands on the wrong tab with nothing to flag it.
+
+It is isolated in `bookModeFor()` (`ads/types.ts`) with the reasoning attached, and the dashboard's ad row prints which tab an ad appears under, so the mapping is visible in the UI rather than living as folklore.
+
+The competing-price benchmark follows the same asymmetry as the book's sort: **selling** competes with sellers and buyers take the cheapest, so it shows the *lowest* ask and undercutting wins; **buying** is the mirror.
+
+The wizard also enforces the [amount clamp](#51-the-amount-clamp) from the other direction — a max limit above what the stated inventory is worth is rejected at the point the ad is written, rather than when someone tries to take it.
+
+### Dashboard — `dashboard/`
+
+| Component | Notes |
+|---|---|
+| **Panel** (`dashboard/panel.tsx`) | Collapsible section shell — title, lead slot, trailing slot, a separate `collapsedTrailing`, and the disclosure wiring. `PanelEmpty` is the shared empty treatment. |
+| **OrdersPanel** (`dashboard/orders-panel.tsx`) | Open/Past tabs, status badges, Resume vs View, cancel. |
+| **AdsPanel** (`dashboard/ads-panel.tsx`) | Price, inventory, limits, methods, window, floating-margin badge, book tab, take-down. |
+
+Each panel collapses independently and remembers it, via `useCollapsed(key)` — folding away a long orders list must not also hide your ads.
+
+**Panels show empty states rather than vanishing.** On the book, rendering nothing when empty is right. On a dashboard it is not: an empty Orders panel points at the book, an empty Ads panel offers to post one. A dashboard that disappears when you have nothing is one you cannot use to start.
+
+### Profile — `profile/`
+
+Identity card (avatar, nickname, verified mark, copyable address, trading-since) over six record tiles: rating, trades, completion, average release, 30-day volume, positive feedback.
+
+These are the metrics a counterparty judges you on — the same trust block the order book shows for *other* traders, turned to face you. A public trader profile is largely this screen again.
+
+**The picture is the deterministic wallet avatar**, not an upload: it hashes the address, so it is stable, needs no storage, and matches how the same trader appears everywhere else.
+
+**`joinedAt` is a plain date string formatted with a pinned UTC timezone.** A timestamp would reproduce the chat-timestamp hydration mismatch; pinning the zone avoids it by construction instead of guarding with `useMounted()`.
 
 ### Chat — `chat/chat-panel.tsx`
 
@@ -382,7 +441,8 @@ The earlier app's scroll-triggered `Reveal` wrapper was not carried over — not
 
 - **No `Date.now()` in a render body.** It is impure and lint enforces it. Resolve timestamps once when a message is created — in an event handler or a lazy `useState` initializer, both of which are fine.
 - **No `setState` in an effect.** Lint enforces this too. Reach for `useSyncExternalStore` when you need external state.
-- **Anything timezone- or clock-dependent renders only after mount**, behind `useMounted()` (`lib/use-mounted.ts`). The server cannot know the viewer's timezone, so formatting a time during SSR is a guaranteed mismatch.
+- **Anything timezone- or clock-dependent renders only after mount**, behind `useMounted()` (`lib/use-mounted.ts`). The server cannot know the viewer's timezone, so formatting a time during SSR is a guaranteed mismatch. Where a date is fixed rather than live, pin the formatter's `timeZone` instead — deterministic, and no mount guard needed.
+- **Persisted UI state goes through an external store**, never a `useState` seeded from `localStorage`. `lib/use-collapsed.ts` (keyed, for panels) and the orders/ads stores are the three examples.
 
 ### Accessibility — hold the line
 
@@ -428,6 +488,8 @@ Each of these was a known flaw in the earlier app, fixed here on day one:
 | Trade detail at `/p2p/orders/[id]` | Inline expanding panel | Sizing a trade without leaving the book |
 | `localStorage` trade state excluded | Open orders persisted | Losing a trade in flight on navigation is worse than the coupling |
 | `EscrowStatus` has four states | Five, adding `cancelled` | An order dropped before the fiat leg reaches none of the other four |
+| No ad posting | `/p2p/ads/new` wizard | Takers alone are half a marketplace; someone has to make the offers |
+| — | `/dashboard` and `/profile` | Your orders and ads outgrew a panel on the book; the book is for finding a counterparty |
 
 ### Open questions
 
@@ -436,6 +498,8 @@ Each of these was a known flaw in the earlier app, fixed here on day one:
 - **Contrast.** Neither the brand-green nor the sell-red solid button clears 4.5:1 against white text. Inherited from the brand palette; fixing it means darkening both fills.
 - **Sorting controls.** The book always sorts by best price. The reference exposes a sort selector.
 - **`PaymentBubble`.** Inline payment and payment-request bubbles with Pay/Reject actions — the richest chat feature, still unbuilt.
+- **Published ads do not appear in the public book.** The blocker is a product decision, not effort: your own ad in a book you can trade against means trading with yourself. Either give it a "Yours" treatment with the action disabled, or filter it from the taker's view. The former is more honest about how a P2P book works.
+- **Profile is read-only.** No editing, and no public `/traders/[address]` view, though the record tiles are already the shape one would need.
 
 ---
 
@@ -451,7 +515,10 @@ Deliberately excluded. Every seam is a mocked async function that resolves after
 | Approve / release | `advance()` in `trade/trade-screen.tsx` |
 | Cancel (refund) | `cancelOrder()` in `trade/trade-screen.tsx` |
 | Dispute | `raiseDispute()` in `trade/trade-screen.tsx` |
+| Publishing an ad | `handlePublish()` in `ads/post-ad-screen.tsx` |
 | Order persistence | `trade/open-orders-store.ts` — swap the localStorage layer |
+| Ad persistence | `ads/ads-store.ts` — same |
+| Trader record | `profile/mock-profile.ts` — derived from settled escrows in a real build |
 | Stellar SDK, Horizon, XDR signing | None — the UI never touches these |
 | API routes, Supabase | None |
 
@@ -463,16 +530,20 @@ Status vocabularies the UI renders:
 type EscrowStatus     = "pending" | "funded" | "disputed" | "released" | "cancelled";
 type EscrowStepStatus = "completed" | "current" | "pending" | "disputed";
 type OrderMode        = "buy" | "sell";
+type AdSide           = OrderMode;   // inverted for the book — see 5.3
+type PriceType        = "fixed" | "floating";
 ```
 
 ---
 
 ## 10. What's next
 
+- [ ] Publish ads into the public book, once the self-trade question is settled
 - [ ] `/wallet` — balance card, quick actions, recent activity
 - [ ] `/transactions` — searchable, tabbed, day-grouped history
 - [ ] `PaymentBubble` — inline payment and request bubbles in chat
-- [ ] Navigation items in the header, once there is more than one destination
+- [ ] Editing and taking down ads from the dashboard (currently take-down only)
+- [ ] A public trader profile at `/traders/[address]`
 - [ ] `/escrow/[id]/admin` — dispute resolver form, internal-facing
 - [ ] Decide the i18n policy before more copy accumulates
 - [ ] Verify both themes on every new screen; check contrast on `muted-foreground` over `background`
