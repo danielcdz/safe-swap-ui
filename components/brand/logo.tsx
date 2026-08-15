@@ -1,0 +1,49 @@
+/**
+ * SafeSwap brand marks — vectors taken directly from the official Visual
+ * Identity guide (shield + bi-directional arrows forming an "S"). The two-tone
+ * brand fills are intentionally fixed hex so the mark stays on-brand in any
+ * theme; only the wordmark text follows the theme foreground.
+ *
+ * The same paths back the browser tab icon in `app/icon.svg` — change one and
+ * change the other.
+ */
+
+export function ShieldMark({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 333.38 377.02"
+      className={className}
+      role="img"
+      aria-label="SafeSwap"
+    >
+      <path
+        fill="#01a78f"
+        d="M324.02,87.89v91.11c0,2.97-3.41,4.68-5.82,2.9l-65.51-48.46-83.46-61.75v-.07l-.05.04-81.07,59.97c26.98,19.37,53.95,38.74,80.93,58.11-15.52,13.34-31.04,26.68-46.55,40.02l-83.51-61.78-9.82-7.26c-9.25-6.84-14.7-17.63-14.7-29.08h0c0-11.46,5.45-22.24,14.7-29.08l9.82-7.26c34.7-25.67,69.41-51.34,104.11-77.01,15.49-11.46,36.71-11.46,52.2,0,35.52,26.27,71.04,52.55,106.57,78.82l16.36-12.11c2.4-1.78,5.82-.08,5.82,2.9Z"
+      />
+      <path
+        fill="#5fd6ac"
+        d="M14.44,291.63v-91.11c0-2.97,3.41-4.68,5.8-2.9l65.39,48.46,83.3,61.75v.07l.05-.04,80.92-59.97c-26.92-19.37-53.85-38.74-80.77-58.11,15.49-13.34,30.98-26.68,46.46-40.02l83.35,61.78,9.8,7.26c9.23,6.84,14.68,17.63,14.68,29.08h0c0,11.46-5.44,22.24-14.68,29.08l-9.8,7.26c-34.64,25.67-69.27,51.34-103.91,77.01-15.46,11.46-36.64,11.46-52.1,0-35.45-26.27-70.91-52.55-106.36-78.82l-16.33,12.11c-2.4,1.78-5.81.08-5.81-2.9Z"
+      />
+    </svg>
+  );
+}
+
+/** The name on its own, for places where the mark already stands nearby. */
+export function WordmarkText({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`leading-none font-medium tracking-tight text-foreground ${className}`}
+    >
+      <span className="font-bold">Safe</span>Swap
+    </span>
+  );
+}
+
+export function Wordmark({ className = "" }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-2.5 ${className}`}>
+      <ShieldMark className="h-7 w-auto" />
+      <WordmarkText className="text-[1.35rem]" />
+    </span>
+  );
+}
