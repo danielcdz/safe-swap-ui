@@ -44,6 +44,10 @@ and every other table references it by that 56-character key.
 That single decision explains most of what follows: the address format CHECK,
 the absence of RLS policies, and why access runs through the server.
 
+It also means **an address is only trustworthy once it has been verified** —
+the server must derive the actor from a signed session, never from a request
+body. See [`WALLET-AUTH.md`](./WALLET-AUTH.md).
+
 ---
 
 ## 2. Shape

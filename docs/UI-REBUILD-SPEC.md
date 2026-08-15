@@ -6,7 +6,7 @@ This started as a plan for rebuilding the SafeSwap interface from an earlier cod
 
 **Scope:** UI only. Wallet connectors, escrow/blockchain calls, API routes, and database wiring are deliberately excluded — see [Out of scope](#9-out-of-scope) for the seams left open.
 
-A Supabase database now exists but nothing in the app talks to it yet — see [`SUPABASE-SCHEMA.md`](./SUPABASE-SCHEMA.md).
+A Supabase database now exists but nothing in the app talks to it yet — see [`SUPABASE-SCHEMA.md`](./SUPABASE-SCHEMA.md). The wallet connector is still mocked; [`WALLET-AUTH.md`](./WALLET-AUTH.md) covers how the real one will work.
 
 ---
 
