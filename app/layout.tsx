@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/app-shell";
+import { WalletProvider } from "@/components/wallet/wallet-provider";
 
 // SafeSwap brand typeface (self-hosted variable font).
 const satoshi = localFont({
@@ -37,7 +38,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AppShell>{children}</AppShell>
+          <WalletProvider>
+            <AppShell>{children}</AppShell>
+          </WalletProvider>
         </ThemeProvider>
       </body>
     </html>

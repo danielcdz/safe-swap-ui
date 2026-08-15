@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -8,12 +9,16 @@ import {
   Copy,
   LayoutDashboard,
   LogOut,
+  TriangleAlert,
   UserRound,
+  Wallet,
 } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { WalletBadge } from "@/components/ui/wallet-badge";
-import { truncateAddress } from "@/lib/format";
 import { useNickname } from "@/components/profile/profile-store";
-import { CONNECTED_ADDRESS } from "@/lib/wallet";
+import { useWallet } from "@/components/wallet/wallet-provider";
+import { truncateAddress } from "@/lib/format";
+import { EXPECTED_NETWORK } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,6 +28,7 @@ import { cn } from "@/lib/utils";
 export function WalletMenu() {
   const router = useRouter();
   const nickname = useNickname();
+  const { address, network, wrongNetwork, ready, disconnect } = useWallet();
   const [open, setOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
@@ -55,17 +61,15 @@ export function WalletMenu() {
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(CONNECTED_ADDRESS);
+    if (!address) return;
+    await navigator.clipboard.writeText(address);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
-  /**
-   * Seam: the real disconnect clears the connector's session and any cached
-   * public key. Until then, leaving for the connect screen is the whole flow.
-   */
   function handleDisconnect() {
     setOpen(false);
+    disconnect();
     router.push("/");
   }
 
@@ -123,6 +127,23 @@ export function WalletMenu() {
     }
   }
 
+  // No wallet: offer the way in rather than an empty chip. Held back until the
+  // silent restore settles, so a returning user doesn't see it flash.
+  if (!address) {
+    return (
+      <Link
+        href="/"
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          !ready && "invisible",
+        )}
+      >
+        <Wallet aria-hidden className="size-4" />
+        <span className="hidden sm:inline">Connect wallet</span>
+      </Link>
+    );
+  }
+
   return (
     <div ref={containerRef} data-slot="wallet-menu" className="relative">
       <button
@@ -130,7 +151,7 @@ export function WalletMenu() {
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Wallet ${truncateAddress(CONNECTED_ADDRESS)} — open menu`}
+        aria-label={`Wallet ${truncateAddress(address)} — open menu`}
         onClick={() => setOpen((value) => !value)}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown") {
@@ -138,16 +159,23 @@ export function WalletMenu() {
             setOpen(true);
           }
         }}
-        className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border bg-card py-1 ps-1 pe-2 transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden sm:pe-3"
+        className={cn(
+          "inline-flex cursor-pointer items-center gap-2 rounded-full border bg-card py-1 ps-1 pe-2 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden sm:pe-3",
+          wrongNetwork
+            ? "border-warning/40 hover:border-warning/60"
+            : "border-border hover:border-primary/40",
+        )}
       >
-        <WalletBadge
-          address={CONNECTED_ADDRESS}
-          size="sm"
-          className="size-7 text-[10px]"
-        />
+        <WalletBadge address={address} size="sm" className="size-7 text-[10px]" />
         <span className="hidden font-mono text-xs sm:inline">
-          {truncateAddress(CONNECTED_ADDRESS)}
+          {truncateAddress(address)}
         </span>
+        {wrongNetwork ? (
+          <TriangleAlert
+            aria-label={`Wrong network: ${network}`}
+            className="size-3.5 shrink-0 text-warning"
+          />
+        ) : null}
         <ChevronDown
           aria-hidden
           className={cn(
@@ -164,11 +192,7 @@ export function WalletMenu() {
           className="absolute end-0 top-full z-50 mt-2 w-64 rounded-2xl border border-border bg-popover p-1.5 shadow-xl"
         >
           <div className="flex items-center gap-2.5 px-2.5 py-2">
-            <WalletBadge
-              address={CONNECTED_ADDRESS}
-              size="sm"
-              className="size-8"
-            />
+            <WalletBadge address={address} size="sm" className="size-8" />
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="flex items-center gap-1.5 truncate text-sm font-semibold">
                 {nickname}
@@ -178,10 +202,16 @@ export function WalletMenu() {
                 />
               </span>
               <span className="truncate font-mono text-xs text-muted-foreground">
-                {truncateAddress(CONNECTED_ADDRESS, 6, 6)}
+                {truncateAddress(address, 6, 6)}
               </span>
             </div>
           </div>
+
+          {wrongNetwork ? (
+            <p className="mx-1 mb-1 rounded-lg bg-warning/10 px-2 py-1.5 text-[11px] text-warning">
+              On {network}. Switch Freighter to {EXPECTED_NETWORK.label}.
+            </p>
+          ) : null}
 
           <div role="separator" className="my-1 h-px bg-border" />
 

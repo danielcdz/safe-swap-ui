@@ -8,7 +8,15 @@ keyed by wallet address, which is precisely why the second half of this
 document exists.
 
 Researched 2026-08-15 against `@stellar/freighter-api@6.0.1` (latest) and
-`@stellar/stellar-sdk@16.x`. Nothing here is implemented yet.
+`@stellar/stellar-sdk@16.x`.
+
+**Status:** step 1 of §6 is built — `components/wallet/wallet-provider.tsx`
+handles connection, silent restore, network guarding and signing, and the app
+targets **testnet** (`EXPECTED_NETWORK` in `lib/wallet.ts`). Steps 2–3, the
+challenge/verify routes that make an address *trustworthy*, are not.
+
+Until then the app knows which wallet is connected but the server cannot
+prove it — so no server write may derive its actor from the client yet.
 
 ---
 
@@ -172,17 +180,15 @@ The previous app has a working connection at
 
 ## 6. Build order
 
-1. **`useWallet()` provider** — connect, silent restore via `getAddress()`,
-   network read from `getNetwork()`, `WatchWalletChanges` wired up. Replaces
-   the `CONNECTED_ADDRESS` constant in `lib/wallet.ts`. Self-contained and
-   testable with no backend.
+1. ~~**`useWallet()` provider**~~ — **done.** Connect, silent restore via
+   `getAddress()`, network read from `getNetwork()`, `WatchWalletChanges`
+   wired up. The `CONNECTED_ADDRESS` stub is gone.
 2. **Challenge/verify routes** — `GET /api/auth/challenge`,
    `POST /api/auth/verify`, nonce store, httpOnly session cookie.
 3. **Server-side actor** — a helper that reads the session and returns the
    verified address, used by every route that writes to Supabase.
-4. **Connect screen** — swap `mockConnectWallet()` for the real flow, with
-   states for *not installed*, *rejected*, *wrong network*, and *signature
-   failed*.
+4. ~~**Connect screen**~~ — **done.** Real flow with *not installed* (offers
+   the download), *rejected*, and *wrong network* states.
 
 Steps 1 and 4 change what the user sees. Steps 2 and 3 are what make the
 database trustworthy.
