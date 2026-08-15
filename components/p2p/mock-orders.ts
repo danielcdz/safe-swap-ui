@@ -11,7 +11,7 @@ export const MOCK_ORDERS: P2POrder[] = [
     mode: "buy",
     trader: {
       nickname: "CryptoTico",
-      address: "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ",
+      address: "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJQ",
       verified: true,
       rating: 4.95,
       opsCount: 612,
@@ -30,7 +30,7 @@ export const MOCK_ORDERS: P2POrder[] = [
     mode: "buy",
     trader: {
       nickname: "AnaSwaps",
-      address: "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN",
+      address: "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWNA",
       verified: true,
       rating: 4.88,
       opsCount: 198,
@@ -68,7 +68,7 @@ export const MOCK_ORDERS: P2POrder[] = [
     mode: "buy",
     trader: {
       nickname: "ChepeTrader",
-      address: "GBVVJJFLRPJMXOEKXPJDGA7CXHEFCRYMXZFYWJFX7EGBF6ENCF3KSPA",
+      address: "GBVVJJFLRPJMXOEKXPJDGA7CXHEFCRYMXZFYWJFX7EGBF6ENCF3KSPAQ",
       verified: false,
       rating: 4.61,
       opsCount: 41,

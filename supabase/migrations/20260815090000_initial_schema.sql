@@ -11,7 +11,8 @@
 -- access, mint a JWT carrying the wallet address and add policies reading
 -- `auth.jwt() ->> 'wallet_address'` — do not loosen this by dropping RLS.
 
-create extension if not exists "pgcrypto";
+-- No extensions required: gen_random_uuid() is core from Postgres 13, and this
+-- project runs 17.6.
 
 -- ---------------------------------------------------------------- enums ----
 
