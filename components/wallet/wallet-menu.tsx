@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Copy, LayoutDashboard, LogOut } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  LayoutDashboard,
+  LogOut,
+  UserRound,
+} from "lucide-react";
 import { WalletBadge } from "@/components/ui/wallet-badge";
 import { truncateAddress } from "@/lib/format";
 import { CONNECTED_ADDRESS } from "@/lib/wallet";
@@ -61,6 +68,16 @@ export function WalletMenu() {
   }
 
   const items = [
+    {
+      key: "profile",
+      icon: UserRound,
+      label: "Profile",
+      onSelect: () => {
+        setOpen(false);
+        router.push("/profile");
+      },
+      destructive: false,
+    },
     {
       key: "dashboard",
       icon: LayoutDashboard,

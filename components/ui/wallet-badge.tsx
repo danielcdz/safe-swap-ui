@@ -3,13 +3,14 @@ import { cn } from "@/lib/utils";
 
 export interface WalletBadgeProps extends React.ComponentProps<"div"> {
   address: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
 const sizeClasses = {
   sm: "size-9 text-xs",
   md: "size-11 text-sm",
   lg: "size-12 text-sm",
+  xl: "size-20 text-2xl",
 } as const;
 
 /** Token-based pairs only — the avatar has to survive both themes. */
