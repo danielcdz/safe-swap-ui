@@ -202,6 +202,8 @@ The fully-rounded button is a defining trait of the brand. Keep it.
 
 Assets in `app/fonts/`: `Satoshi-Variable.woff2` and `SATOSHI-LICENSE.txt` — **the license must ship with the font.**
 
+The browser tab icon is `app/icon.svg`, a Next file convention, so no metadata wiring is needed. It carries the `ShieldMark` paths centred in a square viewBox — the mark is taller than wide, and a browser would otherwise stretch it into a square tab slot. Keep those paths in step with `components/brand/logo.tsx`.
+
 | Use | Classes |
 |---|---|
 | Page title | `text-2xl font-bold tracking-tight` |
@@ -285,7 +287,8 @@ All paths under `components/`.
 | **TabBar** (`ui/tab-bar.tsx`) | Pill segmented control. Track `bg-primary/5 rounded-full p-1`. Props `size` (`sm` for section headers, `md` standalone) and `activeTone` (`primary` \| `destructive`) so a buy/sell switch carries its side colour. Full roving tabindex — arrows, Home, End — with `role="tablist"`/`role="tab"`. |
 | **WalletBadge** (`ui/wallet-badge.tsx`) | Deterministic avatar. Hashes the **address** — not the handle, so identity survives a rename — to pick one of four token-based colour pairs, and derives 2-letter initials. Sizes `sm` \| `md` \| `lg`. |
 | **InfoTip** (`ui/info-tip.tsx`) | `(i)` affordance. Opens on hover, focus, **and tap** — pointer-only tooltips are unreachable by keyboard and invisible on touch. `role="tooltip"` + `aria-describedby`; Escape and blur dismiss. Resets inherited uppercase/tracking. |
-| **ConfirmDialog** (`ui/confirm-dialog.tsx`) | Modal for irreversible actions. `role="dialog" aria-modal`, Escape and backdrop press dismiss, focus moves to the confirm button on open and returns to the opener on close, body scroll locked. |
+| **Dialog** (`ui/dialog.tsx`) | Modal shell — backdrop, Escape, focus in on open and back to the opener on close, body scroll lock, optional `initialFocusRef` and footer. Every modal builds on this; do not re-implement the mechanics. |
+| **ConfirmDialog** (`ui/confirm-dialog.tsx`) | `Dialog` plus a confirm/dismiss footer, for irreversible actions. Focus lands on the confirm button. |
 | **ThemeToggle** (`ui/theme-toggle.tsx`) | Sun/Moon swap on the `Button` primitive at `size="icon"`. Uses `useSyncExternalStore` for a hydration-safe mounted flag. |
 | **NumberField** (`ui/number-field.tsx`) | Pill number input with −/+ steppers. Typing stays free-form so a half-entered value isn't clamped out from under the cursor; the steppers clamp and the parent validates. |
 | **TextField** (`ui/text-field.tsx`) | Pill input following the search-bar shape language — `rounded-full` on a `primary/5` wash, ring on focus, leading icon, trailing slot, inline error wired through `aria-invalid`/`aria-describedby`. **Currently unused**; kept for the amount-entry, dispute, and admin forms still to come. |
@@ -385,13 +388,23 @@ Each panel collapses independently and remembers it, via `useCollapsed(key)` —
 
 ### Profile — `profile/`
 
-Identity card (avatar, nickname, verified mark, copyable address, trading-since) over six record tiles: rating, trades, completion, average release, 30-day volume, positive feedback.
+Identity card (avatar, editable nickname, verified mark, copyable address, trading-since) over six record tiles: rating, trades, completion, average release, 30-day volume, positive feedback.
 
 These are the metrics a counterparty judges you on — the same trust block the order book shows for *other* traders, turned to face you. A public trader profile is largely this screen again.
 
 **The picture is the deterministic wallet avatar**, not an upload: it hashes the address, so it is stable, needs no storage, and matches how the same trader appears everywhere else.
 
 **`joinedAt` is a plain date string formatted with a pinned UTC timezone.** A timestamp would reproduce the chat-timestamp hydration mismatch; pinning the zone avoids it by construction instead of guarding with `useMounted()`.
+
+#### 5.4 Identity is editable, verification is earned
+
+**Nickname** (`profile/profile-store.ts`) is an override on the fixture, persisted, edited inline behind a pencil. It also renders in the wallet-menu header above the address — without a second surface, editing it would change one heading and nothing else.
+
+`validateNickname()` is exported so any other surface reuses the rule rather than inventing a second one: 3–20 characters, no leading separator, and **Unicode letter/number classes rather than ASCII ranges**. An ASCII pattern rejects José and Andrés — names these fixtures already use, in a market where SINPE Móvil is a payment rail. Non-ASCII names are a requirement here, not an edge case.
+
+**Verification** (`profile/verification.ts`) is four steps — wallet ownership, email, phone, government ID — each `unverified → pending → verified`. The button in the identity card reports progress (`Get verified · 2/4`) and opens the dialog.
+
+**Only the government ID step grants the public Verified mark.** Email and phone are contact details, not identity; letting them light a badge counterparties read as *"this person is who they say"* would make the app's strongest trust signal cheap. `isVerified()` derives the mark from that one step, and the fixture carries no `verified` field — a hardcoded boolean beside a derived one is two sources of truth waiting to disagree.
 
 ### Chat — `chat/chat-panel.tsx`
 
@@ -442,7 +455,8 @@ The earlier app's scroll-triggered `Reveal` wrapper was not carried over — not
 - **No `Date.now()` in a render body.** It is impure and lint enforces it. Resolve timestamps once when a message is created — in an event handler or a lazy `useState` initializer, both of which are fine.
 - **No `setState` in an effect.** Lint enforces this too. Reach for `useSyncExternalStore` when you need external state.
 - **Anything timezone- or clock-dependent renders only after mount**, behind `useMounted()` (`lib/use-mounted.ts`). The server cannot know the viewer's timezone, so formatting a time during SSR is a guaranteed mismatch. Where a date is fixed rather than live, pin the formatter's `timeZone` instead — deterministic, and no mount guard needed.
-- **Persisted UI state goes through an external store**, never a `useState` seeded from `localStorage`. `lib/use-collapsed.ts` (keyed, for panels) and the orders/ads stores are the three examples.
+- **Persisted UI state goes through an external store**, never a `useState` seeded from `localStorage`. `lib/use-collapsed.ts` (keyed, for panels), the orders and ads stores, and the nickname and verification stores all follow the same shape.
+- **Validate against Unicode classes, not ASCII ranges.** This market writes José and Andrés; `[a-zA-Z]` is a bug waiting to be filed.
 
 ### Accessibility — hold the line
 
@@ -499,7 +513,8 @@ Each of these was a known flaw in the earlier app, fixed here on day one:
 - **Sorting controls.** The book always sorts by best price. The reference exposes a sort selector.
 - **`PaymentBubble`.** Inline payment and payment-request bubbles with Pay/Reject actions — the richest chat feature, still unbuilt.
 - **Published ads do not appear in the public book.** The blocker is a product decision, not effort: your own ad in a book you can trade against means trading with yourself. Either give it a "Yours" treatment with the action disabled, or filter it from the taker's view. The former is more honest about how a P2P book works.
-- **Profile is read-only.** No editing, and no public `/traders/[address]` view, though the record tiles are already the shape one would need.
+- **No public trader view.** `/traders/[address]` does not exist, though the profile's record tiles are already the shape it needs.
+- **Verification status is client-held.** Fine for the UI, meaningless as a security boundary — a real build reads it from the KYC provider and never trusts the client.
 
 ---
 
@@ -519,6 +534,8 @@ Deliberately excluded. Every seam is a mocked async function that resolves after
 | Order persistence | `trade/open-orders-store.ts` — swap the localStorage layer |
 | Ad persistence | `ads/ads-store.ts` — same |
 | Trader record | `profile/mock-profile.ts` — derived from settled escrows in a real build |
+| Nickname | `setNickname()` in `profile/profile-store.ts` |
+| Identity verification | `startVerification()` in `profile/verification-dialog.tsx`; statuses in `profile/verification.ts` |
 | Stellar SDK, Horizon, XDR signing | None — the UI never touches these |
 | API routes, Supabase | None |
 
@@ -532,6 +549,7 @@ type EscrowStepStatus = "completed" | "current" | "pending" | "disputed";
 type OrderMode        = "buy" | "sell";
 type AdSide           = OrderMode;   // inverted for the book — see 5.3
 type PriceType        = "fixed" | "floating";
+type VerificationStatus = "unverified" | "pending" | "verified";
 ```
 
 ---
@@ -544,6 +562,7 @@ type PriceType        = "fixed" | "floating";
 - [ ] `PaymentBubble` — inline payment and request bubbles in chat
 - [ ] Editing and taking down ads from the dashboard (currently take-down only)
 - [ ] A public trader profile at `/traders/[address]`
+- [ ] `app/favicon.ico` alongside the SVG, if pre-16.4 Safari matters
 - [ ] `/escrow/[id]/admin` — dispute resolver form, internal-facing
 - [ ] Decide the i18n policy before more copy accumulates
 - [ ] Verify both themes on every new screen; check contrast on `muted-foreground` over `background`
