@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatAsset, formatFiat, formatPrice } from "@/lib/format";
@@ -150,9 +150,13 @@ export function OrderTradePanel({
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
           {order.terms}
         </p>
-        <p className="mt-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
-          <ShieldCheck aria-hidden className="size-4 shrink-0 text-primary" />
-          {MARKET.asset} is locked in escrow until both sides confirm.
+        <p className="mt-2 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-warning">
+          <ShieldAlert aria-hidden className="mt-px size-4 shrink-0" />
+          <span>
+            SafeSwap does not hold funds. You and the advertiser transfer
+            directly, so only confirm a step once the money has arrived.
+            Escrow is coming soon.
+          </span>
         </p>
       </div>
 
@@ -273,7 +277,7 @@ export function OrderTradePanel({
           {submitting ? (
             <>
               <Loader2 aria-hidden className="size-4 animate-spin" />
-              Opening escrow…
+              Opening trade…
             </>
           ) : (
             `${SIDE_TONE[order.mode].label} ${MARKET.asset}`
