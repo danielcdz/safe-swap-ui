@@ -22,6 +22,8 @@ import { WalletBadge } from "@/components/ui/wallet-badge";
 import { cn } from "@/lib/utils";
 import { formatAsset, formatFiat, formatPrice, truncateAddress } from "@/lib/format";
 import type { TradeRecord } from "@/lib/trades/queries";
+import { ChatPanel } from "@/components/chat/chat-panel";
+import { useTradeMessages } from "./use-trade-messages";
 import { EscrowStatusBadge } from "./escrow-status-badge";
 import { EscrowStepper } from "./escrow-stepper";
 import { MANUAL_STEPS, stageOf, type TradeRole } from "./types";
@@ -149,6 +151,8 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
       setPending(false);
     }
   }
+
+  const chat = useTradeMessages(trade.id, trade.viewer);
 
   const details = trade.sellerPaymentDetails;
   const hasDetails = Boolean(
@@ -407,12 +411,14 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
           </div>
         </div>
 
-        {/* Chat lands here next. */}
-        <section className="flex h-[26rem] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center lg:sticky lg:top-20">
-          <p className="text-sm text-muted-foreground">
-            Chat with {counterparty.nickname} arrives in the next step.
-          </p>
-        </section>
+        <ChatPanel
+          counterparty={counterparty}
+          messages={chat.messages}
+          onSend={chat.send}
+          sending={chat.sending}
+          error={chat.error}
+          className="h-[26rem] lg:sticky lg:top-20 lg:h-[min(36rem,calc(100dvh-8rem))]"
+        />
       </div>
 
       <ConfirmDialog

@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomInt } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { postSystemMessage } from "./messages";
 import { bookModeFor, type AdSide } from "@/components/ads/types";
 import {
   MANUAL_STEPS,
@@ -29,6 +30,8 @@ export interface PaymentDetails {
 export interface TradeRecord {
   id: string;
   reference: string;
+  /** The address this record was loaded for — which bubble is "mine". */
+  viewer: string;
   status: string;
   settlement: "manual" | "escrow";
   /** The viewer's side of the asset. */
@@ -136,6 +139,7 @@ export async function getTradeFor(
   return {
     id: row.id,
     reference: row.reference,
+    viewer,
     status: row.status,
     settlement: row.settlement,
     role,
@@ -254,6 +258,16 @@ const STAMP: Record<string, string> = {
 
 const TERMINAL = new Set(["completed", "cancelled", "released"]);
 
+/** What each transition says in the conversation. */
+const SYSTEM_NOTE: Record<string, string> = {
+  fiat_sent: "Buyer marked the payment as sent",
+  fiat_confirmed: "Seller confirmed the payment arrived",
+  asset_sent: "Seller sent the USDC",
+  completed: "Buyer confirmed the USDC arrived — trade complete",
+  cancelled: "Trade cancelled",
+  disputed: "Dispute raised",
+};
+
 /**
  * Moves a trade one step.
  *
@@ -311,6 +325,8 @@ export async function advanceTrade(input: {
 
   if (error) throw new Error(`Could not advance the trade: ${error.message}`);
   if (!data?.length) return "stale";
+
+  await postSystemMessage(input.id, SYSTEM_NOTE[next] ?? `Trade moved to ${next}`);
 
   // Cancelling frees the inventory the trade was holding.
   if (next === "cancelled") {

@@ -6,7 +6,7 @@ import { WalletBadge } from "@/components/ui/wallet-badge";
 import { cn } from "@/lib/utils";
 import { truncateAddress } from "@/lib/format";
 import { useMounted } from "@/lib/use-mounted";
-import type { Trade, TradeMessage } from "@/components/trade/types";
+import type { TradeMessage } from "@/components/trade/types";
 
 const timeFormatter = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",
@@ -78,9 +78,12 @@ function Bubble({ message }: { message: TradeMessage }) {
 }
 
 export interface ChatPanelProps {
-  trade: Trade;
+  counterparty: { address: string; nickname: string };
   messages: TradeMessage[];
   onSend: (text: string) => void;
+  sending?: boolean;
+  /** Shown above the composer when a send fails. */
+  error?: string | null;
   className?: string;
 }
 
@@ -90,15 +93,16 @@ export interface ChatPanelProps {
  * land in the same stream as the conversation.
  */
 export function ChatPanel({
-  trade,
+  counterparty,
   messages,
   onSend,
+  sending = false,
+  error = null,
   className,
 }: ChatPanelProps) {
   const [draft, setDraft] = React.useState("");
   const [noticeOpen, setNoticeOpen] = React.useState(true);
   const listRef = React.useRef<HTMLUListElement>(null);
-  const { counterparty } = trade;
 
   React.useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -138,7 +142,7 @@ export function ChatPanel({
               {truncateAddress(counterparty.address)}
             </span>
             {" · "}
-            {counterparty.opsCount} trades
+            trade counterparty
           </span>
         </div>
       </div>
@@ -148,8 +152,8 @@ export function ChatPanel({
         <div className="flex shrink-0 items-start gap-2 border-b border-border bg-warning/10 px-4 py-2.5 text-xs text-warning">
           <ShieldAlert aria-hidden className="mt-px size-4 shrink-0" />
           <p className="flex-1">
-            Never release USDC until the payment has cleared in your own
-            account.
+            Never send funds until you have checked the other side&rsquo;s transfer
+            actually arrived. SafeSwap holds nothing.
           </p>
           <button
             type="button"
@@ -175,6 +179,15 @@ export function ChatPanel({
         ))}
       </ul>
 
+      {error ? (
+        <p
+          role="alert"
+          className="shrink-0 border-t border-border bg-destructive/10 px-4 py-2 text-xs text-destructive"
+        >
+          {error}
+        </p>
+      ) : null}
+
       {/* Composer */}
       <div className="flex shrink-0 items-end gap-2 border-t border-border p-3">
         <textarea
@@ -194,7 +207,7 @@ export function ChatPanel({
         <button
           type="button"
           onClick={submit}
-          disabled={draft.trim() === ""}
+          disabled={draft.trim() === "" || sending}
           aria-label="Send message"
           className="grid size-10 shrink-0 cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground transition-all hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-hidden active:scale-97 disabled:pointer-events-none disabled:opacity-40"
         >

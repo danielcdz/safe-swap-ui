@@ -1,5 +1,14 @@
 "use client";
 
+/**
+ * SUPERSEDED by manual-trade-screen.tsx, and kept deliberately.
+ *
+ * This is the escrow composition: the lifecycle, the stepper wired to
+ * ESCROW_STEPS, and the release/dispute actions. Escrow is deferred rather
+ * than abandoned, so the assembled version stays here as the starting point
+ * for bringing it back. Nothing routes to it.
+ */
+
 import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -286,7 +295,10 @@ export function TradeScreen({ trade }: { trade: Trade }) {
 
         {/* Chat */}
         <ChatPanel
-          trade={trade}
+          counterparty={{
+            address: trade.counterparty.address,
+            nickname: trade.counterparty.nickname,
+          }}
           messages={messages}
           onSend={handleSend}
           // Capped rather than viewport-filling: an uncapped panel sets the
