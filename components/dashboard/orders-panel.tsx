@@ -6,64 +6,65 @@ import { X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TabBar } from "@/components/ui/tab-bar";
-import { EscrowStatusBadge } from "@/components/trade/escrow-status-badge";
+import { TradeStatusBadge } from "@/components/trade/trade-status-badge";
 import {
-  isOpenStatus,
-  removeOpenOrder,
-  setOpenOrderStatus,
-  useOpenOrders,
-} from "@/components/trade/open-orders-store";
-import type { EscrowStatus } from "@/components/trade/types";
+  invalidateTrades,
+  useTrades,
+  type TradeSummary,
+} from "@/components/trade/trades-store";
+import { isInFlight, type TradeStatus } from "@/components/trade/types";
 import { MARKET } from "@/components/p2p/types";
 import { SIDE_TONE } from "@/components/p2p/side";
 import { cn } from "@/lib/utils";
 import { formatAsset, formatFiat } from "@/lib/format";
 import { Panel, PanelEmpty } from "./panel";
 
+/** The viewer's side of the asset, in the book's own vocabulary. */
+const modeFor = (role: TradeSummary["role"]) =>
+  role === "buyer" ? "buy" : "sell";
+
 export function OrdersPanel() {
-  const orders = useOpenOrders();
+  const trades = useTrades();
   const [tabIndex, setTabIndex] = React.useState(0);
   const [confirming, setConfirming] = React.useState<string | null>(null);
+  const [cancelling, setCancelling] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const showingOpen = tabIndex === 0;
 
-  // Records written before snapshots existed cannot be rendered, and there is
-  // nothing left to look them up in — skip rather than guess.
-  const all = orders.flatMap((record) => {
-    if (!record.snapshot) return [];
-    const { mode, price, nickname } = record.snapshot;
-    const isBuy = mode === "buy";
-    return [
-      {
-        record,
-        mode,
-        nickname,
-        fiatAmount: isBuy ? record.amount : record.amount * price,
-        assetAmount: isBuy ? record.amount / price : record.amount,
-      },
-    ];
-  });
+  const rows = trades.filter((trade) => isInFlight(trade.status) === showingOpen);
+  const openCount = trades.filter((trade) => isInFlight(trade.status)).length;
+  const confirmingRow = trades.find((trade) => trade.id === confirming);
 
-  const rows = all.filter(
-    ({ record }) => isOpenStatus(record.status) === showingOpen,
-  );
-  const openCount = all.filter(({ record }) => isOpenStatus(record.status)).length;
-  const confirmingRow = all.find((row) => row.record.orderId === confirming);
+  /**
+   * Cancelling goes through the same endpoint the trade screen uses, so the
+   * rules live in one place — past `open` the API refuses, because by then the
+   * money may already have moved and the way out is a dispute.
+   */
+  async function confirmCancel() {
+    if (!confirmingRow) return;
+    setCancelling(true);
+    setError(null);
 
-  function closeOrder(orderId: string, status: EscrowStatus) {
-    // Same rule as the trade screen: an order can only be cancelled before the
-    // fiat leg moves. Past that, the × just clears a finished row.
-    if (status === "pending") {
-      setConfirming(orderId);
-      return;
+    try {
+      const response = await fetch(`/api/trades/${confirmingRow.id}/advance`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "cancel", from: confirmingRow.status }),
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        setError(body.error ?? "Could not cancel the trade.");
+      }
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      // Either way the row may have moved on — the counterparty could have
+      // advanced it while this dialog was open.
+      invalidateTrades();
+      setCancelling(false);
+      setConfirming(null);
     }
-    removeOpenOrder(orderId);
-  }
-
-  function confirmCancel() {
-    if (!confirming) return;
-    setOpenOrderStatus(confirming, "cancelled");
-    setConfirming(null);
   }
 
   return (
@@ -89,15 +90,26 @@ export function OrdersPanel() {
         </span>
       }
     >
+      {error ? (
+        <p
+          role="alert"
+          className="border-b border-border bg-destructive/10 px-5 py-2.5 text-xs text-destructive"
+        >
+          {error}
+        </p>
+      ) : null}
+
       {rows.length > 0 ? (
         <ul className="divide-y divide-border">
-          {rows.map(({ record, mode, nickname, fiatAmount, assetAmount }) => {
-            const cancellable = record.status === "pending";
-            const href = `/trades/${record.orderId}?amount=${record.amount}&method=${encodeURIComponent(record.method)}`;
+          {rows.map((trade) => {
+            const mode = modeFor(trade.role);
+            // Only before anything has moved. Past that a trade cannot be
+            // withdrawn, and a past row has nothing left to close.
+            const cancellable = trade.status === "open";
 
             return (
               <li
-                key={record.orderId}
+                key={trade.id}
                 className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-3.5"
               >
                 <span
@@ -111,50 +123,46 @@ export function OrdersPanel() {
 
                 <div className="flex min-w-40 flex-1 flex-col">
                   <span className="text-sm font-semibold tabular-nums">
-                    {formatFiat(fiatAmount)}
+                    {formatFiat(trade.fiatAmount)}
                     <span className="font-normal text-muted-foreground">
                       {" · "}
-                      {formatAsset(assetAmount)} {MARKET.asset}
+                      {formatAsset(trade.assetAmount)} {MARKET.asset}
                     </span>
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                    {nickname} · {record.method}
+                    {trade.counterparty.nickname} · {trade.paymentMethod}
                   </span>
                 </div>
 
-                <EscrowStatusBadge status={record.status} />
+                <TradeStatusBadge status={trade.status as TradeStatus} />
 
                 <Link
-                  href={href}
+                  href={`/trades/${trade.id}`}
                   className={cn(buttonVariants({ size: "sm" }), "min-w-20")}
                 >
                   {showingOpen ? "Resume" : "View"}
                 </Link>
 
-                <button
-                  type="button"
-                  aria-label={
-                    cancellable
-                      ? `Cancel order with ${nickname}`
-                      : `Remove order with ${nickname} from this list`
-                  }
-                  title={cancellable ? "Cancel order" : "Remove from list"}
-                  onClick={() => closeOrder(record.orderId, record.status)}
-                  className="grid size-7 cursor-pointer place-items-center rounded-full text-destructive transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
-                >
-                  <X aria-hidden className="size-4" />
-                </button>
+                {cancellable ? (
+                  <button
+                    type="button"
+                    aria-label={`Cancel trade with ${trade.counterparty.nickname}`}
+                    title="Cancel trade"
+                    onClick={() => setConfirming(trade.id)}
+                    className="grid size-7 cursor-pointer place-items-center rounded-full text-destructive transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+                  >
+                    <X aria-hidden className="size-4" />
+                  </button>
+                ) : (
+                  <span aria-hidden className="size-7" />
+                )}
               </li>
             );
           })}
         </ul>
       ) : (
         <PanelEmpty>
-          <p>
-            {showingOpen
-              ? "No orders in flight."
-              : "Nothing closed yet."}
-          </p>
+          <p>{showingOpen ? "No trades in flight." : "Nothing closed yet."}</p>
           {showingOpen ? (
             <Link
               href="/p2p/orders"
@@ -168,19 +176,19 @@ export function OrdersPanel() {
 
       <ConfirmDialog
         open={confirmingRow !== undefined}
-        title="Cancel this order?"
+        title="Cancel this trade?"
         description={
           confirmingRow ? (
             <>
-              The escrow refunds {formatAsset(confirmingRow.assetAmount)}{" "}
-              {MARKET.asset} to {confirmingRow.nickname} and
-              this order closes. Cancelling often can affect your completion
-              rate.
+              This closes the trade with {confirmingRow.counterparty.nickname}{" "}
+              and returns {formatAsset(confirmingRow.assetAmount)}{" "}
+              {MARKET.asset} to the offer. Cancelling often can affect your
+              completion rate.
             </>
           ) : null
         }
-        confirmLabel="Cancel order"
-        dismissLabel="Keep order"
+        confirmLabel={cancelling ? "Cancelling…" : "Cancel trade"}
+        dismissLabel="Keep trade"
         onConfirm={confirmCancel}
         onDismiss={() => setConfirming(null)}
       />

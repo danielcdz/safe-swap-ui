@@ -6,6 +6,7 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatAsset, formatFiat, formatPrice } from "@/lib/format";
+import { invalidateTrades } from "@/components/trade/trades-store";
 import { MARKET, type P2POrder } from "./types";
 import { SIDE_TONE } from "./side";
 
@@ -126,6 +127,7 @@ export function OrderTradePanel({
         return;
       }
 
+      invalidateTrades();
       router.push(`/trades/${body.id}`);
     } catch {
       setSubmitError("Could not reach the server.");

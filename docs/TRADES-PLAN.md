@@ -159,7 +159,13 @@ problem polling solves.
 5. ✅ `advance` with per-role validation, the trust notice, and "escrow coming
    soon"
 6. ✅ Payment details on the profile, disclosed only to an active counterparty
-7. Retire `open-orders-store` — the last localStorage holdout
+7. ✅ Retire `open-orders-store` — trades now come from the database
+
+   Trade state was never the client's to own: the other party advancing a
+   trade has to show up in your list, and a record confined to one browser
+   could not do that. `components/profile/verification.ts` is still on
+   localStorage and has the same problem — a self-attested badge no one else
+   can see — but that is its own piece of work.
 
 ---
 

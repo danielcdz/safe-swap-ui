@@ -24,6 +24,7 @@ import { formatAsset, formatFiat, formatPrice, truncateAddress } from "@/lib/for
 import type { TradeRecord } from "@/lib/trades/queries";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { useTradeMessages } from "./use-trade-messages";
+import { invalidateTrades } from "./trades-store";
 import { EscrowStatusBadge } from "./escrow-status-badge";
 import { EscrowStepper } from "./escrow-stepper";
 import { MANUAL_STEPS, stageOf, type TradeRole } from "./types";
@@ -148,6 +149,8 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
     } catch {
       setError("Could not reach the server.");
     } finally {
+      // The dashboard list caches; this trade just changed state in it.
+      invalidateTrades();
       setPending(false);
     }
   }

@@ -171,6 +171,84 @@ export async function getTradeFor(
   };
 }
 
+/* -- listing --------------------------------------------------------------- */
+
+export interface TradeSummary {
+  id: string;
+  reference: string;
+  status: string;
+  settlement: "manual" | "escrow";
+  /** The viewer's side of the asset — what the row is labelled Buy or Sell by. */
+  role: TradeRole;
+  counterparty: TradeParticipant;
+  price: number;
+  fiatAmount: number;
+  assetAmount: number;
+  paymentMethod: string;
+  createdAt: string;
+}
+
+/**
+ * Every trade the viewer is in, newest first.
+ *
+ * Both sides of a trade see the same row from their own perspective — the
+ * role, and therefore the Buy/Sell label, inverts between them.
+ */
+export async function listTradesFor(viewer: string): Promise<TradeSummary[]> {
+  const supabase = supabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("trades")
+    .select(
+      "id, reference, status, settlement, maker, taker, price, fiat_amount," +
+        " asset_amount, payment_method, created_at, ads!inner(side)",
+    )
+    .or(`maker.eq.${viewer},taker.eq.${viewer}`)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(`Could not load trades: ${error.message}`);
+  if (!data?.length) return [];
+
+  type Row = Omit<TradeRow, "ads"> & { ads: { side: AdSide } | { side: AdSide }[] };
+  const rows = data as unknown as Row[];
+
+  // One lookup for every counterparty rather than one per row.
+  const others = rows.map((row) => (row.maker === viewer ? row.taker : row.maker));
+  const { data: people, error: peopleError } = await supabase
+    .from("traders")
+    .select("address, nickname")
+    .in("address", [...new Set(others)]);
+
+  if (peopleError) {
+    throw new Error(`Could not load participants: ${peopleError.message}`);
+  }
+
+  const nicknames = new Map(
+    (people as { address: string; nickname: string }[]).map((p) => [
+      p.address,
+      p.nickname,
+    ]),
+  );
+
+  return rows.map((row) => {
+    const isMaker = row.maker === viewer;
+    const other = isMaker ? row.taker : row.maker;
+    return {
+      id: row.id,
+      reference: row.reference,
+      status: row.status,
+      settlement: row.settlement,
+      role: roleFor(one(row.ads).side, isMaker),
+      counterparty: { address: other, nickname: nicknames.get(other) ?? "Unknown" },
+      price: Number(row.price),
+      fiatAmount: Number(row.fiat_amount),
+      assetAmount: Number(row.asset_amount),
+      paymentMethod: row.payment_method,
+      createdAt: row.created_at,
+    };
+  });
+}
+
 export type OpenTradeFailure =
   | "ad-not-found"
   | "own-ad"

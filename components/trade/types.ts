@@ -135,6 +135,19 @@ export type ManualStatus =
   | "asset_sent"
   | "completed";
 
+/** Every state a stored trade can be in, including the two exits. */
+export type TradeStatus = ManualStatus | "cancelled" | "disputed";
+
+/**
+ * Whether a trade still needs someone to do something.
+ *
+ * `disputed` counts as in flight: it is stalled, not finished, and it is the
+ * one state a trader most needs to see near the top of their list.
+ */
+export function isInFlight(status: string) {
+  return status !== "completed" && status !== "cancelled";
+}
+
 /** The step index a status corresponds to; `completed` is past the last one. */
 export function stageOf(status: string) {
   const index = MANUAL_STEPS.findIndex((step) => step.status === status);

@@ -4,10 +4,8 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { useAds } from "@/components/ads/ads-store";
-import {
-  isOpenStatus,
-  useOpenOrders,
-} from "@/components/trade/open-orders-store";
+import { useTrades } from "@/components/trade/trades-store";
+import { isInFlight } from "@/components/trade/types";
 import { cn } from "@/lib/utils";
 
 function Stat({
@@ -42,14 +40,14 @@ function Stat({
  * in the dashboard.
  */
 export function ActivitySummary() {
-  const orders = useOpenOrders();
+  const trades = useTrades();
   const ads = useAds();
 
-  if (orders.length === 0 && ads.length === 0) return null;
+  if (trades.length === 0 && ads.length === 0) return null;
 
-  const open = orders.filter((order) => isOpenStatus(order.status)).length;
-  const disputed = orders.filter(
-    (order) => order.status === "disputed",
+  const open = trades.filter((trade) => isInFlight(trade.status)).length;
+  const disputed = trades.filter(
+    (trade) => trade.status === "disputed",
   ).length;
 
   return (
@@ -59,7 +57,7 @@ export function ActivitySummary() {
       className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card px-5 py-4 shadow-sm"
     >
       <div className="flex flex-wrap items-center gap-x-10 gap-y-3">
-        <Stat label="Open orders" value={open} />
+        <Stat label="Open trades" value={open} />
         <Stat label="Live ads" value={ads.length} />
         {disputed > 0 ? (
           <Stat label="In dispute" value={disputed} tone="destructive" />

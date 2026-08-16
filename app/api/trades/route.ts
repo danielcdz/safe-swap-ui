@@ -1,6 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionAddress } from "@/lib/auth/session";
-import { openTrade, type OpenTradeFailure } from "@/lib/trades/queries";
+import {
+  listTradesFor,
+  openTrade,
+  type OpenTradeFailure,
+} from "@/lib/trades/queries";
+
+/** The viewer's own trades. Scoped to the session, so there is nothing to pass. */
+export async function GET() {
+  const viewer = await getSessionAddress();
+  if (!viewer) {
+    return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+  }
+
+  try {
+    return NextResponse.json(
+      { trades: await listTradesFor(viewer) },
+      { headers: { "cache-control": "no-store" } },
+    );
+  } catch (error) {
+    console.error("trades GET failed", error);
+    return NextResponse.json(
+      { error: "Could not load your trades." },
+      { status: 500 },
+    );
+  }
+}
 
 /** Each refusal gets its own message — these are user mistakes, not attacks. */
 const REASONS: Record<OpenTradeFailure, { status: number; error: string }> = {
