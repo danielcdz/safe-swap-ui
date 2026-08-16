@@ -10,13 +10,20 @@ document exists.
 Researched 2026-08-15 against `@stellar/freighter-api@6.0.1` (latest) and
 `@stellar/stellar-sdk@16.x`.
 
-**Status:** step 1 of §6 is built — `components/wallet/wallet-provider.tsx`
-handles connection, silent restore, network guarding and signing, and the app
-targets **testnet** (`EXPECTED_NETWORK` in `lib/wallet.ts`). Steps 2–3, the
-challenge/verify routes that make an address *trustworthy*, are not.
+**Status:** §6 steps 1–4 are built and working. The app targets **testnet**
+(`EXPECTED_NETWORK` in `lib/wallet.ts`), connecting performs a full sign-in,
+and `getSessionAddress()` is the verified answer to "who is calling".
 
-Until then the app knows which wallet is connected but the server cannot
-prove it — so no server write may derive its actor from the client yet.
+Verified against the running server with a generated keypair standing in for
+Freighter: the happy path issues a challenge, accepts a SEP-53 signature, sets
+an HttpOnly cookie and creates the trader row. Eight attack cases are rejected
+— an attacker signing the victim's challenge, a burned nonce even with a valid
+signature, a signature over a message we never issued, unknown nonce, missing
+signature, malformed address, and a missing or forged cookie.
+
+**Not exercised:** the Freighter extension itself — `requestAccess`, the real
+signing prompt, a network switch, and a user rejecting the prompt. Those need
+a browser.
 
 ---
 
@@ -183,15 +190,29 @@ The previous app has a working connection at
 1. ~~**`useWallet()` provider**~~ — **done.** Connect, silent restore via
    `getAddress()`, network read from `getNetwork()`, `WatchWalletChanges`
    wired up. The `CONNECTED_ADDRESS` stub is gone.
-2. **Challenge/verify routes** — `GET /api/auth/challenge`,
-   `POST /api/auth/verify`, nonce store, httpOnly session cookie.
-3. **Server-side actor** — a helper that reads the session and returns the
-   verified address, used by every route that writes to Supabase.
+2. ~~**Challenge/verify routes**~~ — **done.** `POST /api/auth/challenge`,
+   `POST /api/auth/verify`, `GET`/`DELETE /api/auth/session`, single-use nonces
+   in Postgres, httpOnly session cookie. First verify creates the trader.
+3. ~~**Server-side actor**~~ — **built, unused.** `requireSessionAddress()` in
+   `lib/auth/session.ts`. Nothing writes data yet, so nothing calls it — but
+   every future write must.
 4. ~~**Connect screen**~~ — **done.** Real flow with *not installed* (offers
    the download), *rejected*, and *wrong network* states.
 
 Steps 1 and 4 change what the user sees. Steps 2 and 3 are what make the
 database trustworthy.
+
+### Gotchas that cost time
+
+- **The Data API must be enabled** on the Supabase project. `supabase-js`
+  talks to PostgREST, so with it off every query fails as `PGRST002` —
+  "Could not query the database for the schema cache" — and the logs name the
+  giveaway sentinel, `db-schemas=pg_pgrst_no_exposed_schemas`. RLS with no
+  policies already denies everyone without the secret key, so enabling it
+  changes nothing about the security posture.
+- **`SESSION_SECRET` must be at least 32 characters** and is rejected
+  otherwise. `openssl rand -base64 32` yields 44; a shorter generator will
+  silently produce a secret the code refuses.
 
 ---
 

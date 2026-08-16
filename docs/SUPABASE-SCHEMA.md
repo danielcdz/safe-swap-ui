@@ -172,6 +172,14 @@ schema. That was the only WARN and it is cleared.
 - **`pgcrypto` is not needed.** `gen_random_uuid()` is core from Postgres 13.
 - **`rls_auto_enable`** already exists in `public` — a Supabase event trigger,
   not ours.
+- **The Data API has to be on.** `supabase-js` speaks PostgREST, so with the
+  Data API disabled every query fails as `PGRST002` while the database itself
+  is perfectly healthy — MCP keeps working, which makes it look like a key
+  problem. The postgrest logs name it outright:
+  `db-schemas=pg_pgrst_no_exposed_schemas`. Enabling it costs nothing
+  security-wise: RLS with no policies still denies everyone without the secret
+  key. Going the other way — Data API off, direct Postgres via an ORM — means
+  dropping supabase-js.
 
 ---
 
