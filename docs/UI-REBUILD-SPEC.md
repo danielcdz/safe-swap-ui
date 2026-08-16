@@ -85,7 +85,11 @@ in the dashboard. That split exists because the book is a place you scan for
 someone to trade with; your own state competing for the same screen made both
 harder to read.
 
-**Market scope: USDC/USD only.** A single market, stated by a chip rather than offered as a selector. Payment rails are the ones that settle in dollars: Zelle, Wise, and Costa Rican banks that hold USD accounts (BAC Credomatic, Banco Nacional, Scotiabank). Colón rails such as SINPE Móvil would be a second market, not a payment method on this one.
+**Market scope: USDC/USD only.** A single market, stated by a chip rather than offered as a selector.
+
+**Payment rails are Costa Rican only** (`lib/payment-methods.ts`): SINPE Móvil, BAC Credomatic, Banco Nacional, Banco Popular, Scotiabank. Wise and Zelle were dropped to keep the first market local.
+
+> **Open inconsistency.** SINPE Móvil settles in colones, while `MARKET.fiat` is `USD`. Either the market becomes CRC, or a second CRC market is added and the rails split between them. Until then an ad quotes dollars against a colón rail, which is not something a real trader could act on.
 
 **Copy is English throughout.** The earlier app mixed English with hardcoded Spanish and a half-built per-component `lang` prop; neither was carried over. Adopting a real i18n library is still an open decision.
 

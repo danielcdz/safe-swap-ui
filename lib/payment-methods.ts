@@ -1,20 +1,21 @@
 /**
- * The rails SafeSwap supports for USDC/USD.
+ * The rails SafeSwap supports.
  *
  * A product decision, not data — which is why it is a constant rather than a
- * table or something derived from whatever ads happen to exist. It was
- * previously inferred from the order fixtures, so an empty book meant an empty
- * filter.
+ * table or something derived from whatever ads happen to exist.
  *
- * All of these settle in dollars. Colón rails such as SINPE Móvil belong to a
- * different market, not to this list.
+ * Costa Rican rails only: SINPE Móvil plus the local banks. International
+ * options (Wise, Zelle) were dropped to keep the first market local.
+ *
+ * Note this sits uneasily with `MARKET.fiat` still being USD — SINPE Móvil
+ * settles in colones. See the note in docs/UI-REBUILD-SPEC.md §1.
  */
 export const PAYMENT_METHODS = [
+  "SINPE Móvil",
   "BAC Credomatic",
   "Banco Nacional",
+  "Banco Popular",
   "Scotiabank",
-  "Wise",
-  "Zelle",
 ] as const;
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
