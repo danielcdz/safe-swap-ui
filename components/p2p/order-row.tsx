@@ -82,17 +82,33 @@ export function OrderRow({ order, open, onToggle }: OrderRowProps) {
               ) : null}
             </div>
 
+            {/* A new trader has no track record. "0% completion" would read
+                as a bad one, so absent figures are omitted rather than
+                rendered as zeroes. */}
             <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground tabular-nums">
-              <Star aria-hidden className="size-3 fill-current text-primary" />
-              <span>{trader.rating.toFixed(2)}</span>
-              <span aria-hidden className="text-muted-foreground/50">
-                ·
+              {trader.rating !== null ? (
+                <>
+                  <Star
+                    aria-hidden
+                    className="size-3 fill-current text-primary"
+                  />
+                  <span>{trader.rating.toFixed(2)}</span>
+                  <span aria-hidden className="text-muted-foreground/50">
+                    ·
+                  </span>
+                </>
+              ) : null}
+              <span>
+                {trader.opsCount} {trader.opsCount === 1 ? "trade" : "trades"}
               </span>
-              <span>{trader.opsCount} ops</span>
-              <span aria-hidden className="text-muted-foreground/50">
-                ·
-              </span>
-              <span>{trader.completionRate}% completion</span>
+              {trader.completionRate !== null ? (
+                <>
+                  <span aria-hidden className="text-muted-foreground/50">
+                    ·
+                  </span>
+                  <span>{trader.completionRate}% completion</span>
+                </>
+              ) : null}
             </div>
 
             <button

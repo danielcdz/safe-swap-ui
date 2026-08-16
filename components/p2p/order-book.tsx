@@ -8,7 +8,8 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { TabBar } from "@/components/ui/tab-bar";
 import { cn } from "@/lib/utils";
 import { MARKET, type OrderMode } from "./types";
-import { MOCK_ORDERS, PAYMENT_METHODS } from "./mock-orders";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
+import type { P2POrder } from "./types";
 import { SIDE_TONE } from "./side";
 import { MarketStats } from "./market-stats";
 import { ORDER_GRID, OrderRow } from "./order-row";
@@ -48,24 +49,53 @@ export function OrderBook() {
   const mode = MODES[modeIndex];
   const hasFilters = amount.trim() !== "" || method !== ALL_METHODS;
 
+  // Side and payment method are server-side filters — the book can grow past
+  // what is sensible to ship to the browser. The amount filter stays local:
+  // it is a slider over what is already on screen, not a new query.
+  // Keyed by the query it answers, so `loading` is derived from a stale result
+  // rather than set synchronously in the effect — which would cascade renders.
+  const queryKey = `${mode}|${method}`;
+  const [result, setResult] = React.useState<{
+    key: string;
+    orders: P2POrder[];
+    failed: boolean;
+  } | null>(null);
+
+  const loading = result?.key !== queryKey;
+  const loadError = result?.key === queryKey && result.failed;
+  const book = React.useMemo(
+    () => (result?.key === queryKey ? result.orders : []),
+    [result, queryKey],
+  );
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ mode });
+    if (method !== ALL_METHODS) params.set("paymentMethod", method);
+
+    fetch(`/api/ads?${params}`, { signal: controller.signal, cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("failed");
+        return response.json() as Promise<{ orders: P2POrder[] }>;
+      })
+      .then((data) =>
+        setResult({ key: `${mode}|${method}`, orders: data.orders, failed: false }),
+      )
+      .catch((error: unknown) => {
+        if ((error as Error)?.name === "AbortError") return;
+        setResult({ key: `${mode}|${method}`, orders: [], failed: true });
+      });
+
+    return () => controller.abort();
+  }, [mode, method]);
+
   const orders = React.useMemo(() => {
     const wanted = Number(amount.replace(/[^\d.]/g, ""));
-
-    return MOCK_ORDERS.filter((order) => order.mode === mode)
-      .filter(
-        (order) =>
-          method === ALL_METHODS || order.paymentMethods.includes(method),
-      )
-      .filter(
-        (order) =>
-          !wanted || (wanted >= order.limits.min && wanted <= order.limits.max),
-      )
-      .sort((a, b) =>
-        // Best price depends on which side you're on: cheapest to buy,
-        // highest to sell.
-        mode === "buy" ? a.price - b.price : b.price - a.price,
-      );
-  }, [mode, amount, method]);
+    if (!wanted) return book;
+    return book.filter(
+      (order) => wanted >= order.limits.min && wanted <= order.limits.max,
+    );
+  }, [book, amount]);
 
   const avgWindowMinutes = orders.length
     ? Math.round(
@@ -198,7 +228,19 @@ export function OrderBook() {
           ))}
         </div>
 
-        {orders.length > 0 ? (
+        {loading ? (
+          <p className="p-8 text-center text-sm text-muted-foreground">
+            Loading offers…
+          </p>
+        ) : loadError ? (
+          <div className="p-6">
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-destructive/30 bg-destructive/5 p-10 text-center">
+              <p className="text-sm text-destructive">
+                Could not load the order book.
+              </p>
+            </div>
+          </div>
+        ) : orders.length > 0 ? (
           <div className="divide-y divide-border">
             {orders.map((order) => (
               <OrderRow
@@ -217,7 +259,9 @@ export function OrderBook() {
           <div className="p-6">
             <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border bg-card/50 p-10 text-center">
               <p className="text-sm text-muted-foreground">
-                No {mode} offers match these filters.
+                {hasFilters
+                  ? `No ${mode} offers match these filters.`
+                  : `Nobody is offering to ${mode === "buy" ? "sell" : "buy"} ${MARKET.asset} yet.`}
               </p>
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 Clear filters

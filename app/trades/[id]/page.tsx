@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
-import { MOCK_ORDERS } from "@/components/p2p/mock-orders";
+import { getOrderById } from "@/lib/ads/queries";
 import { TradeScreen } from "@/components/trade/trade-screen";
 import { buildTrade } from "@/components/trade/build-trade";
 
@@ -25,7 +25,7 @@ export default async function TradePage({
   const { id } = await params;
   const { amount, method } = await searchParams;
 
-  const order = MOCK_ORDERS.find((candidate) => candidate.id === id);
+  const order = await getOrderById(id);
   if (!order) notFound();
 
   const trade = buildTrade(order, Number(amount), method);

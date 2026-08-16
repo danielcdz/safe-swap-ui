@@ -1,79 +1,61 @@
 "use client";
 
 import * as React from "react";
-import type { Ad } from "./types";
+import { createScopedStore } from "@/lib/scoped-store";
+import type { AdSide, PriceType } from "./types";
 
-const STORAGE_KEY = "safeswap:ads";
+export interface Ad {
+  id: string;
+  side: AdSide;
+  priceType: PriceType;
+  price: number;
+  margin: number | null;
+  totalAmount: number;
+  limits: { min: number; max: number };
+  windowMinutes: number;
+  paymentMethods: string[];
+  terms: string;
+  autoReply: string | null;
+  createdAt: string;
+}
 
-/**
- * Ads you've published, held on the client.
- *
- * Same shape as the open-orders store, and for the same reason: the list has
- * to outlive route changes, and `useSyncExternalStore` gives an empty server
- * snapshot with the real one after hydration.
- *
- * Seam: this is where a real persistence layer plugs in.
- */
 const EMPTY: Ad[] = [];
-let ads: Ad[] = EMPTY;
-const listeners = new Set<() => void>();
 
-function read(): Ad[] {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? (parsed as Ad[]) : EMPTY;
-  } catch {
-    return EMPTY;
-  }
-}
-
-function commit(next: Ad[]) {
-  ads = next;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ads));
-  } catch {
-    // Private mode or a full quota — the list won't survive a reload.
-  }
-  for (const listener of listeners) listener();
-}
-
-if (typeof window !== "undefined") ads = read();
-
-function handleStorage(event: StorageEvent) {
-  if (event.key !== STORAGE_KEY) return;
-  ads = read();
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  window.addEventListener("storage", handleStorage);
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", handleStorage);
-  };
+async function loadAds(): Promise<Ad[]> {
+  const response = await fetch("/api/ads/mine", { cache: "no-store" });
+  // 401 simply means signed out.
+  return response.ok ? ((await response.json()) as { ads: Ad[] }).ads : EMPTY;
 }
 
 /**
- * The store owns record identity — the caller describes the ad, this assigns
- * the id and timestamp. Keeps clock reads out of component bodies, where they
- * are impure.
+ * Ads you have published.
+ *
+ * Scoped to the session, so switching accounts does not show one trader's ads
+ * to another.
  */
-export function publishAd(draft: Omit<Ad, "id" | "createdAt">) {
-  const createdAt = Date.now();
-  const id = `ad-${createdAt.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  commit([{ ...draft, id, createdAt }, ...ads]);
-}
-
-export function removeAd(id: string) {
-  commit(ads.filter((ad) => ad.id !== id));
-}
+const store = createScopedStore<Ad[]>(loadAds, EMPTY);
 
 export function useAds() {
   return React.useSyncExternalStore(
-    subscribe,
-    () => ads,
-    () => EMPTY,
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
   );
+}
+
+export const invalidateAds = store.invalidate;
+
+/** Takes an ad down. Resolves with an error message, or undefined on success. */
+export async function removeAd(id: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(`/api/ads/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const body = (await response.json()) as { error?: string };
+      return body.error ?? "Could not take the ad down.";
+    }
+    store.set(store.getSnapshot().filter((ad) => ad.id !== id));
+    return undefined;
+  } catch {
+    return "Could not reach the server.";
+  }
 }

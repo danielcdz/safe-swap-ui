@@ -2,69 +2,94 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, TriangleAlert, Wallet } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Download, Loader2, TriangleAlert, Wallet } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { useWallet } from "@/components/wallet/wallet-provider";
+import { EXPECTED_NETWORK } from "@/lib/wallet";
+import { cn } from "@/lib/utils";
 
-/** Where a connected user lands: the order book. Not built yet. */
+/** Where a connected user lands: the order book. */
 const POST_CONNECT_ROUTE = "/p2p/orders";
-
-/**
- * Seam: stands in for the Freighter connector (`useWallet()`), which is out of
- * scope for the UI rebuild. Resolves after a beat so the pending state — the
- * window where the wallet extension has the user's attention — is honest.
- */
-async function mockConnectWallet() {
-  await new Promise((resolve) => setTimeout(resolve, 1100));
-}
 
 export function ConnectWalletButton() {
   const router = useRouter();
-  const [pending, setPending] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const {
+    sessionAddress,
+    connecting,
+    authenticating,
+    error,
+    ready,
+    wrongNetwork,
+    network,
+    signIn,
+  } = useWallet();
 
-  async function handleConnect() {
-    setError(null);
-    setPending(true);
-    try {
-      await mockConnectWallet();
-      router.push(POST_CONNECT_ROUTE);
-    } catch {
-      setError("Couldn't reach your wallet. Try again.");
-      setPending(false);
-    }
-  }
+  // Redirect on the *verified* address, not the connected one — a wallet the
+  // server has not vouched for is not signed in.
+  React.useEffect(() => {
+    if (sessionAddress) router.replace(POST_CONNECT_ROUTE);
+  }, [sessionAddress, router]);
+
+  const busy = connecting || authenticating;
+
+  const notInstalled = error?.code === "not-installed";
 
   return (
     <div className="flex w-full flex-col gap-3">
-      {error ? (
+      {wrongNetwork ? (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-xs text-destructive"
+          className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5 text-start text-xs text-warning"
         >
           <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
-          <span>{error}</span>
+          <span>
+            Freighter is on {network}. Switch it to {EXPECTED_NETWORK.label} to
+            continue.
+          </span>
+        </div>
+      ) : error ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-start text-xs text-destructive"
+        >
+          <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
+          <span>{error.message}</span>
         </div>
       ) : null}
 
-      <Button
-        size="lg"
-        className="w-full"
-        onClick={handleConnect}
-        disabled={pending}
-        aria-busy={pending}
-      >
-        {pending ? (
-          <>
-            <Loader2 aria-hidden className="size-4 animate-spin" />
-            Waiting for wallet…
-          </>
-        ) : (
-          <>
-            <Wallet aria-hidden className="size-4" />
-            Connect wallet
-          </>
-        )}
-      </Button>
+      {notInstalled ? (
+        <a
+          href="https://www.freighter.app/"
+          target="_blank"
+          rel="noreferrer"
+          className={cn(buttonVariants({ size: "lg" }), "w-full")}
+        >
+          <Download aria-hidden className="size-4" />
+          Install Freighter
+        </a>
+      ) : (
+        <Button
+          size="lg"
+          className="w-full"
+          onClick={signIn}
+          // `ready` gates the button until the silent restore has settled, so
+          // a returning user never sees "Connect" flash before their session.
+          disabled={busy || !ready}
+          aria-busy={busy}
+        >
+          {busy ? (
+            <>
+              <Loader2 aria-hidden className="size-4 animate-spin" />
+              {authenticating ? "Confirm the signature…" : "Waiting for wallet…"}
+            </>
+          ) : (
+            <>
+              <Wallet aria-hidden className="size-4" />
+              Connect wallet
+            </>
+          )}
+        </Button>
+      )}
     </div>
   );
 }

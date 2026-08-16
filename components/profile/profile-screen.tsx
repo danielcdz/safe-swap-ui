@@ -11,12 +11,16 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 import { WalletBadge } from "@/components/ui/wallet-badge";
 import { MARKET } from "@/components/p2p/types";
 import { formatAsset, truncateAddress } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useWallet } from "@/components/wallet/wallet-provider";
 import { joinedLabel, PROFILE } from "./mock-profile";
-import { setNickname, useNickname, validateNickname } from "./profile-store";
+import { updateNickname, useProfile } from "./profile-store";
+import { validateNickname } from "@/lib/nickname";
 import { VerificationDialog } from "./verification-dialog";
 import {
   isVerified,
@@ -62,16 +66,20 @@ function Metric({
 }
 
 export function ProfileScreen() {
-  const nickname = useNickname();
+  const profile = useProfile();
+  const { address } = useWallet();
   const statuses = useVerification();
   const verified = isVerified(statuses);
   const [verifyOpen, setVerifyOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
-  const [draft, setDraft] = React.useState(nickname);
+  const [draft, setDraft] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | undefined>();
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  const draftError = validateNickname(draft);
+  const nickname = profile?.nickname ?? null;
+  const draftError = validateNickname(draft) ?? saveError;
 
   // Focusing is not state, so it is safe to do from an effect.
   React.useEffect(() => {
@@ -79,21 +87,50 @@ export function ProfileScreen() {
   }, [editing]);
 
   function startEditing() {
-    setDraft(nickname);
+    setDraft(nickname ?? "");
+    setSaveError(undefined);
     setEditing(true);
   }
 
-  function save(event: React.FormEvent) {
+  async function save(event: React.FormEvent) {
     event.preventDefault();
-    if (draftError) return;
-    setNickname(draft.trim());
+    if (validateNickname(draft)) return;
+
+    setSaving(true);
+    // The server decides. Writing optimistically and reverting would be worse
+    // than a moment of latency on a name other traders will see.
+    const failure = await updateNickname(draft.trim());
+    setSaving(false);
+
+    if (failure) {
+      setSaveError(failure);
+      return;
+    }
     setEditing(false);
   }
 
   async function copyAddress() {
-    await navigator.clipboard.writeText(PROFILE.address);
+    if (!address) return;
+    await navigator.clipboard.writeText(address);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  // A profile is an identity, and identity here is the wallet. Without one
+  // there is nothing to show — every hook above has already run.
+  if (!address) {
+    return (
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6">
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border bg-card/50 p-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            Connect a wallet to see your profile.
+          </p>
+          <Link href="/" className={buttonVariants({ size: "sm" })}>
+            Connect wallet
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -101,7 +138,7 @@ export function ProfileScreen() {
       {/* Identity */}
       <section className="flex flex-col items-start gap-5 rounded-2xl border border-border bg-card p-6 shadow-sm sm:flex-row sm:items-center">
         <div className="relative shrink-0">
-          <WalletBadge address={PROFILE.address} size="xl" />
+          <WalletBadge address={address} size="xl" />
           <span
             aria-hidden
             className="absolute -end-1 -bottom-1 size-5 rounded-full bg-primary ring-4 ring-card"
@@ -119,7 +156,11 @@ export function ProfileScreen() {
                   aria-label="Nickname"
                   aria-invalid={draftError ? true : undefined}
                   aria-describedby={draftError ? "nickname-error" : undefined}
-                  onChange={(event) => setDraft(event.target.value)}
+                  onChange={(event) => {
+                    setDraft(event.target.value);
+                    setSaveError(undefined);
+                  }}
+                  disabled={saving}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") setEditing(false);
                   }}
@@ -129,8 +170,13 @@ export function ProfileScreen() {
                     draftError && "ring-1 ring-destructive/45 ring-inset",
                   )}
                 />
-                <Button type="submit" size="sm" disabled={Boolean(draftError)}>
-                  Save
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={Boolean(validateNickname(draft)) || saving}
+                  aria-busy={saving}
+                >
+                  {saving ? "Saving…" : "Save"}
                 </Button>
                 <Button
                   type="button"
@@ -154,7 +200,9 @@ export function ProfileScreen() {
             </form>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight">{nickname}</h1>
+              <h1 className="text-2xl font-bold tracking-tight">
+                {nickname ?? truncateAddress(address)}
+              </h1>
               {verified ? (
                 <BadgeCheck
                   className="size-5 shrink-0 text-primary"
@@ -164,6 +212,7 @@ export function ProfileScreen() {
               <button
                 type="button"
                 onClick={startEditing}
+                disabled={!profile}
                 aria-label="Edit nickname"
                 title="Edit nickname"
                 className="grid size-7 cursor-pointer place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-hidden"
@@ -176,12 +225,12 @@ export function ProfileScreen() {
           <button
             type="button"
             onClick={copyAddress}
-            title={PROFILE.address}
+            title={address}
             aria-label="Copy your wallet address"
             className="group inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-hidden"
           >
             <span className="font-mono">
-              {truncateAddress(PROFILE.address, 6, 6)}
+              {truncateAddress(address, 6, 6)}
             </span>
             {copied ? (
               <Check aria-hidden className="size-3.5 text-primary" />
@@ -194,7 +243,7 @@ export function ProfileScreen() {
           </button>
 
           <span className="text-xs text-muted-foreground">
-            Trading since {joinedLabel()}
+            Trading since {profile ? joinedLabel(profile.joinedAt) : "—"}
           </span>
         </div>
 

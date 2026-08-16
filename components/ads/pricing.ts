@@ -1,15 +1,15 @@
-import { MOCK_ORDERS } from "@/components/p2p/mock-orders";
 import { bookModeFor, type AdSide } from "./types";
+import type { P2POrder } from "@/components/p2p/types";
 
 /**
- * Mid-market, taken from the two best prices currently in the book. A real
- * build reads this from an index; the fixtures put it at parity.
+ * Mid-market for USDC/USD.
+ *
+ * A constant, not something derived from the book. USDC is a stablecoin
+ * pegged to the dollar, so parity is the reference regardless of how many ads
+ * happen to exist — and an empty book would otherwise produce NaN. A real
+ * build reads this from a price index.
  */
-export const MARKET_PRICE = (() => {
-  const asks = MOCK_ORDERS.filter((o) => o.mode === "buy").map((o) => o.price);
-  const bids = MOCK_ORDERS.filter((o) => o.mode === "sell").map((o) => o.price);
-  return (Math.min(...asks) + Math.max(...bids)) / 2;
-})();
+export const MARKET_PRICE = 1.0;
 
 /** How far from mid-market an ad may be priced. */
 export const PRICE_BOUNDS = {
@@ -26,18 +26,28 @@ export function priceFromMargin(margin: number) {
   return MARKET_PRICE * (1 + margin / 100);
 }
 
+export interface CompetingPrice {
+  label: string;
+  value: number;
+  beat: "below" | "above";
+}
+
 /**
- * The price this ad is bidding against, and which direction wins.
+ * The price this ad is bidding against, given the live book.
  *
  * Selling competes with other sellers, and buyers take the cheapest — so the
  * benchmark is the lowest ask, and undercutting it wins. Buying is the mirror.
+ * Returns null when nothing is listed on that side.
  */
-export function competingPrice(side: AdSide) {
+export function competingPrice(
+  side: AdSide,
+  book: P2POrder[],
+): CompetingPrice | null {
   const mode = bookModeFor(side);
-  const prices = MOCK_ORDERS.filter((o) => o.mode === mode).map((o) => o.price);
+  const prices = book.filter((o) => o.mode === mode).map((o) => o.price);
   if (prices.length === 0) return null;
 
   return side === "sell"
-    ? { label: "Lowest competing price", value: Math.min(...prices), beat: "below" as const }
-    : { label: "Highest competing price", value: Math.max(...prices), beat: "above" as const };
+    ? { label: "Lowest competing price", value: Math.min(...prices), beat: "below" }
+    : { label: "Highest competing price", value: Math.max(...prices), beat: "above" };
 }

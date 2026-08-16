@@ -7,10 +7,15 @@ export interface OrderTrader {
   /** Stellar public key. Shown truncated and mono, copyable. */
   address: string;
   verified: boolean;
-  rating: number;
+  /**
+   * Null until there is a rating model. Reviews are thumbs up/down, not
+   * stars, so there is nothing honest to put here yet — and a fabricated
+   * number in the trust block is worse than an absent one.
+   */
+  rating: number | null;
   opsCount: number;
-  /** Share of this trader's orders that completed, 0–100. */
-  completionRate: number;
+  /** Share of orders that completed, 0–100. Null before any have settled. */
+  completionRate: number | null;
 }
 
 export interface OrderLimits {

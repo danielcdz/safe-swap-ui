@@ -1,80 +1,62 @@
 "use client";
 
 import * as React from "react";
-import { PROFILE } from "./mock-profile";
+import { createScopedStore } from "@/lib/scoped-store";
 
-const STORAGE_KEY = "safeswap:nickname";
+export interface TraderProfile {
+  address: string;
+  nickname: string;
+  joinedAt: string;
+}
+
+async function loadProfile(): Promise<TraderProfile | null> {
+  const response = await fetch("/api/traders/me", { cache: "no-store" });
+  // 401 simply means signed out — not an error worth surfacing.
+  return response.ok ? ((await response.json()) as TraderProfile) : null;
+}
 
 /**
- * The nickname, overridable and persisted.
+ * The signed-in trader's record.
  *
- * An external store rather than component state, for the same reason as the
- * rest: it has to outlive route changes and be readable from more than one
- * screen, and `useSyncExternalStore` keeps the localStorage read out of
- * render. The server snapshot is the fixture value.
- *
- * Seam: a real build writes this to the trader's profile record.
+ * Scoped to the session: switching accounts drops this immediately rather than
+ * serving the previous trader's nickname under the new address.
  */
-const listeners = new Set<() => void>();
-let nickname: string = PROFILE.nickname;
+const store = createScopedStore<TraderProfile | null>(loadProfile, null);
 
-function read() {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) || PROFILE.nickname;
-  } catch {
-    return PROFILE.nickname;
-  }
-}
-
-if (typeof window !== "undefined") nickname = read();
-
-function handleStorage(event: StorageEvent) {
-  if (event.key !== STORAGE_KEY) return;
-  nickname = read();
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  window.addEventListener("storage", handleStorage);
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", handleStorage);
-  };
-}
-
-export function setNickname(next: string) {
-  nickname = next;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, next);
-  } catch {
-    // Won't survive a reload, but the session keeps it.
-  }
-  for (const listener of listeners) listener();
-}
-
-export function useNickname() {
+export function useProfile() {
   return React.useSyncExternalStore(
-    subscribe,
-    () => nickname,
-    () => PROFILE.nickname,
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
   );
 }
 
-/**
- * Unicode letter and number classes, not ASCII ranges — this market writes
- * names like José and Andrés, and rejecting them would be a bug, not a rule.
- * A leading separator is still disallowed.
- */
-const NICKNAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._-]*$/u;
-
-/** Returns an error message, or undefined when the value is acceptable. */
-export function validateNickname(value: string) {
-  const trimmed = value.trim();
-  if (trimmed.length < 3) return "At least 3 characters.";
-  if (trimmed.length > 20) return "At most 20 characters.";
-  if (!NICKNAME_PATTERN.test(trimmed)) {
-    return "Letters and numbers, plus spaces . _ - after the first character.";
-  }
-  return undefined;
+/** Convenience for the many places that only need the display name. */
+export function useNickname() {
+  return useProfile()?.nickname ?? null;
 }
+
+/**
+ * Renames the signed-in trader. Resolves with an error message, or undefined
+ * on success. The server decides — this does not write optimistically, because
+ * a name that silently reverted would be worse than a moment of latency.
+ */
+export async function updateNickname(nickname: string): Promise<string | undefined> {
+  try {
+    const response = await fetch("/api/traders/me", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nickname }),
+    });
+
+    const data = (await response.json()) as TraderProfile & { error?: string };
+    if (!response.ok) return data.error ?? "Could not save.";
+
+    store.set(data);
+    return undefined;
+  } catch {
+    return "Could not reach the server.";
+  }
+}
+
+export const refreshProfile = store.invalidate;

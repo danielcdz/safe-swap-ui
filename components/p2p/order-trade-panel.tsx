@@ -113,6 +113,12 @@ export function OrderTradePanel({
       method,
       status: "pending",
       createdAt: Date.now(),
+      snapshot: {
+        mode: order.mode,
+        price: order.price,
+        nickname: order.trader.nickname,
+        address: order.trader.address,
+      },
     });
 
     const query = new URLSearchParams({
