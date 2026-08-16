@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Keypair } from "@stellar/stellar-sdk";
 import { consumeChallenge } from "@/lib/auth/challenge";
 import { createSession } from "@/lib/auth/session";
+import { ensureTrader } from "@/lib/auth/trader";
 import { isStellarAddress } from "@/lib/wallet";
 
 /** One message for every failure, so this endpoint is not a probing oracle. */
@@ -59,7 +60,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: REJECTED }, { status: 401 });
     }
 
+    // First login creates the trader. Doing it here rather than lazily means
+    // every later write can assume the row exists.
+    await ensureTrader(challenge.address);
     await createSession(challenge.address);
+
     return NextResponse.json(
       { address: challenge.address },
       { headers: { "cache-control": "no-store" } },

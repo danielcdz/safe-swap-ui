@@ -13,13 +13,24 @@ const POST_CONNECT_ROUTE = "/p2p/orders";
 
 export function ConnectWalletButton() {
   const router = useRouter();
-  const { address, connecting, error, ready, wrongNetwork, network, connect } =
-    useWallet();
+  const {
+    sessionAddress,
+    connecting,
+    authenticating,
+    error,
+    ready,
+    wrongNetwork,
+    network,
+    signIn,
+  } = useWallet();
 
-  // A restored session should not strand the user on the connect screen.
+  // Redirect on the *verified* address, not the connected one — a wallet the
+  // server has not vouched for is not signed in.
   React.useEffect(() => {
-    if (address && !wrongNetwork) router.replace(POST_CONNECT_ROUTE);
-  }, [address, wrongNetwork, router]);
+    if (sessionAddress) router.replace(POST_CONNECT_ROUTE);
+  }, [sessionAddress, router]);
+
+  const busy = connecting || authenticating;
 
   const notInstalled = error?.code === "not-installed";
 
@@ -60,16 +71,16 @@ export function ConnectWalletButton() {
         <Button
           size="lg"
           className="w-full"
-          onClick={connect}
+          onClick={signIn}
           // `ready` gates the button until the silent restore has settled, so
           // a returning user never sees "Connect" flash before their session.
-          disabled={connecting || !ready}
-          aria-busy={connecting}
+          disabled={busy || !ready}
+          aria-busy={busy}
         >
-          {connecting ? (
+          {busy ? (
             <>
               <Loader2 aria-hidden className="size-4 animate-spin" />
-              Waiting for wallet…
+              {authenticating ? "Confirm the signature…" : "Waiting for wallet…"}
             </>
           ) : (
             <>

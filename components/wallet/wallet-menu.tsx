@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 export function WalletMenu() {
   const router = useRouter();
   const nickname = useNickname();
-  const { address, network, wrongNetwork, ready, disconnect } = useWallet();
+  const { address, network, wrongNetwork, ready, signOut } = useWallet();
   const [open, setOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
@@ -67,9 +67,9 @@ export function WalletMenu() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  function handleDisconnect() {
+  async function handleDisconnect() {
     setOpen(false);
-    disconnect();
+    await signOut();
     router.push("/");
   }
 
