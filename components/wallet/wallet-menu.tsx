@@ -28,7 +28,21 @@ import { cn } from "@/lib/utils";
 export function WalletMenu() {
   const router = useRouter();
   const nickname = useNickname();
-  const { address, network, wrongNetwork, ready, signOut } = useWallet();
+  const {
+    address: walletAddress,
+    sessionAddress,
+    network,
+    wrongNetwork,
+    ready,
+    signOut,
+  } = useWallet();
+
+  // The session is what "signed in" means everywhere else in the app — it is
+  // what the API answers to and what the caches are scoped by. Keying the chip
+  // off the extension instead let the header claim you were signed out while
+  // your own ads and trades loaded behind it. The extension address is the
+  // fallback for a wallet connected but not yet signed in.
+  const address = sessionAddress ?? walletAddress;
   const [open, setOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
