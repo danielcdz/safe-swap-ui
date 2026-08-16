@@ -10,6 +10,7 @@ import {
   signTransaction as freighterSignTransaction,
   WatchWalletChanges,
 } from "@stellar/freighter-api";
+import { setSessionScope } from "@/lib/client-session";
 import {
   EXPECTED_NETWORK,
   isStellarAddress,
@@ -120,6 +121,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const patch = React.useCallback((next: Partial<WalletState>) => {
     setState((current) => ({ ...current, ...next }));
   }, []);
+
+  // Tell per-account caches whose data they should be holding. Without this a
+  // module-level cache keeps serving the previous account after a switch.
+  React.useEffect(() => {
+    setSessionScope(state.sessionAddress);
+  }, [state.sessionAddress]);
 
   React.useEffect(() => {
     let cancelled = false;

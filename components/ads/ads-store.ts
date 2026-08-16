@@ -1,14 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { createScopedStore } from "@/lib/scoped-store";
 import type { AdSide, PriceType } from "./types";
 
-/**
- * Ads you have published, served by the API.
- *
- * Replaced a localStorage store: an ad is an offer other traders act on, so it
- * belongs to the database, not to one browser.
- */
 export interface Ad {
   id: string;
   side: AdSide;
@@ -25,49 +20,30 @@ export interface Ad {
 }
 
 const EMPTY: Ad[] = [];
-let ads: Ad[] = EMPTY;
-let status: "idle" | "loading" | "ready" = "idle";
-const listeners = new Set<() => void>();
 
-function emit() {
-  for (const listener of listeners) listener();
+async function loadAds(): Promise<Ad[]> {
+  const response = await fetch("/api/ads/mine", { cache: "no-store" });
+  // 401 simply means signed out.
+  return response.ok ? ((await response.json()) as { ads: Ad[] }).ads : EMPTY;
 }
 
-async function load() {
-  status = "loading";
-  try {
-    const response = await fetch("/api/ads/mine", { cache: "no-store" });
-    // 401 simply means signed out.
-    ads = response.ok ? ((await response.json()) as { ads: Ad[] }).ads : EMPTY;
-  } catch {
-    ads = EMPTY;
-  } finally {
-    status = "ready";
-    emit();
-  }
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  if (status === "idle") void load();
-  return () => {
-    listeners.delete(listener);
-  };
-}
+/**
+ * Ads you have published.
+ *
+ * Scoped to the session, so switching accounts does not show one trader's ads
+ * to another.
+ */
+const store = createScopedStore<Ad[]>(loadAds, EMPTY);
 
 export function useAds() {
   return React.useSyncExternalStore(
-    subscribe,
-    () => ads,
-    () => EMPTY,
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
   );
 }
 
-/** Re-fetch on the next read, e.g. after publishing. */
-export function invalidateAds() {
-  status = "idle";
-  void load();
-}
+export const invalidateAds = store.invalidate;
 
 /** Takes an ad down. Resolves with an error message, or undefined on success. */
 export async function removeAd(id: string): Promise<string | undefined> {
@@ -77,8 +53,7 @@ export async function removeAd(id: string): Promise<string | undefined> {
       const body = (await response.json()) as { error?: string };
       return body.error ?? "Could not take the ad down.";
     }
-    ads = ads.filter((ad) => ad.id !== id);
-    emit();
+    store.set(store.getSnapshot().filter((ad) => ad.id !== id));
     return undefined;
   } catch {
     return "Could not reach the server.";
