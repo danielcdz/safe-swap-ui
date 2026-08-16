@@ -1,80 +1,92 @@
 "use client";
 
 import * as React from "react";
-import { PROFILE } from "./mock-profile";
 
-const STORAGE_KEY = "safeswap:nickname";
-
-/**
- * The nickname, overridable and persisted.
- *
- * An external store rather than component state, for the same reason as the
- * rest: it has to outlive route changes and be readable from more than one
- * screen, and `useSyncExternalStore` keeps the localStorage read out of
- * render. The server snapshot is the fixture value.
- *
- * Seam: a real build writes this to the trader's profile record.
- */
-const listeners = new Set<() => void>();
-let nickname: string = PROFILE.nickname;
-
-function read() {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) || PROFILE.nickname;
-  } catch {
-    return PROFILE.nickname;
-  }
+export interface TraderProfile {
+  address: string;
+  nickname: string;
+  joinedAt: string;
 }
 
-if (typeof window !== "undefined") nickname = read();
+/**
+ * The signed-in trader's record, served from the API.
+ *
+ * An external store rather than component state so the wallet menu and the
+ * profile screen read one value and a rename updates both at once. It replaced
+ * a localStorage-backed store: a nickname other traders will see belongs to
+ * the database, not to this browser.
+ */
+let profile: TraderProfile | null = null;
+let status: "idle" | "loading" | "ready" = "idle";
+const listeners = new Set<() => void>();
 
-function handleStorage(event: StorageEvent) {
-  if (event.key !== STORAGE_KEY) return;
-  nickname = read();
+function emit() {
   for (const listener of listeners) listener();
+}
+
+async function load() {
+  status = "loading";
+  try {
+    const response = await fetch("/api/traders/me", { cache: "no-store" });
+    // 401 simply means signed out — not an error worth surfacing.
+    profile = response.ok ? ((await response.json()) as TraderProfile) : null;
+  } catch {
+    profile = null;
+  } finally {
+    status = "ready";
+    emit();
+  }
 }
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  window.addEventListener("storage", handleStorage);
+  // First subscriber pulls; later ones reuse what is already here.
+  if (status === "idle") void load();
   return () => {
     listeners.delete(listener);
-    window.removeEventListener("storage", handleStorage);
   };
 }
 
-export function setNickname(next: string) {
-  nickname = next;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, next);
-  } catch {
-    // Won't survive a reload, but the session keeps it.
-  }
-  for (const listener of listeners) listener();
-}
-
-export function useNickname() {
+export function useProfile() {
   return React.useSyncExternalStore(
     subscribe,
-    () => nickname,
-    () => PROFILE.nickname,
+    () => profile,
+    () => null,
   );
 }
 
-/**
- * Unicode letter and number classes, not ASCII ranges — this market writes
- * names like José and Andrés, and rejecting them would be a bug, not a rule.
- * A leading separator is still disallowed.
- */
-const NICKNAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._-]*$/u;
+/** Convenience for the many places that only need the display name. */
+export function useNickname() {
+  return useProfile()?.nickname ?? null;
+}
 
-/** Returns an error message, or undefined when the value is acceptable. */
-export function validateNickname(value: string) {
-  const trimmed = value.trim();
-  if (trimmed.length < 3) return "At least 3 characters.";
-  if (trimmed.length > 20) return "At most 20 characters.";
-  if (!NICKNAME_PATTERN.test(trimmed)) {
-    return "Letters and numbers, plus spaces . _ - after the first character.";
+/**
+ * Renames the signed-in trader. Resolves with an error message, or undefined
+ * on success. The server decides — this does not write optimistically, because
+ * a name that silently reverted would be worse than a moment of latency.
+ */
+export async function updateNickname(nickname: string): Promise<string | undefined> {
+  try {
+    const response = await fetch("/api/traders/me", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nickname }),
+    });
+
+    const data = (await response.json()) as TraderProfile & { error?: string };
+    if (!response.ok) return data.error ?? "Could not save.";
+
+    profile = data;
+    emit();
+    return undefined;
+  } catch {
+    return "Could not reach the server.";
   }
-  return undefined;
+}
+
+/** Called after sign-in or sign-out so the next read refetches. */
+export function refreshProfile() {
+  status = "idle";
+  profile = null;
+  emit();
 }

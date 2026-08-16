@@ -1,14 +1,7 @@
 import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabase/server";
-
-/**
- * A readable placeholder built from the tail of the address, e.g. `Trader-4W37`.
- * Satisfies both the database CHECK (3–20 chars) and `validateNickname()`.
- */
-export function defaultNickname(address: string) {
-  return `Trader-${address.slice(-4)}`;
-}
+import { defaultNickname } from "@/lib/nickname";
 
 /**
  * Creates the trader on first successful login.
