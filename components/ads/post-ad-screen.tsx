@@ -9,11 +9,11 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { NumberField } from "@/components/ui/number-field";
 import { TabBar } from "@/components/ui/tab-bar";
 import { MARKET } from "@/components/p2p/types";
-import { PAYMENT_METHODS } from "@/components/p2p/mock-orders";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { SIDE_TONE } from "@/components/p2p/side";
 import { cn } from "@/lib/utils";
 import { formatAsset, formatFiat, formatPrice } from "@/lib/format";
-import { publishAd } from "./ads-store";
+import { invalidateAds } from "./ads-store";
 import {
   competingPrice,
   MARGIN_BOUNDS,
@@ -22,7 +22,8 @@ import {
   PRICE_STEP,
   priceFromMargin,
 } from "./pricing";
-import type { Ad, AdSide, PriceType } from "./types";
+import { bookModeFor, type AdSide, type PriceType } from "./types";
+import type { P2POrder } from "@/components/p2p/types";
 
 const STEPS = [
   "Type & price",
@@ -182,6 +183,7 @@ export function PostAdScreen() {
   const [step, setStep] = React.useState(0);
   const [form, setForm] = React.useState<AdForm>(INITIAL_FORM);
   const [submitting, setSubmitting] = React.useState(false);
+  const [publishError, setPublishError] = React.useState<string | undefined>();
 
   function set<K extends keyof AdForm>(key: K, value: AdForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -192,7 +194,22 @@ export function PostAdScreen() {
       ? Number(form.price) || 0
       : priceFromMargin(Number(form.margin) || 0);
 
-  const competing = competingPrice(form.side);
+  // The benchmark comes from the live book, so it is only meaningful once
+  // somebody has listed on that side.
+  const [book, setBook] = React.useState<P2POrder[]>([]);
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/ads?mode=${bookModeFor(form.side)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? (r.json() as Promise<{ orders: P2POrder[] }>) : null))
+      .then((d) => d && setBook(d.orders))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [form.side]);
+
+  const competing = competingPrice(form.side, book);
   const totalAmount = Number(form.totalAmount) || 0;
   const minLimit = Number(form.minLimit) || 0;
   const maxLimit = Number(form.maxLimit) || 0;
@@ -234,27 +251,46 @@ export function PostAdScreen() {
     );
   }
 
-  /** Seam: the real publish writes the ad to the order book service. */
   async function handlePublish() {
     setSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    setPublishError(undefined);
 
-    const draft: Omit<Ad, "id" | "createdAt"> = {
-      side: form.side,
-      priceType: form.priceType,
-      price: Number(resolvedPrice.toFixed(3)),
-      margin:
-        form.priceType === "floating" ? Number(form.margin) || 0 : undefined,
-      totalAmount,
-      limits: { min: minLimit, max: maxLimit },
-      windowMinutes: form.windowMinutes,
-      paymentMethods: form.paymentMethods,
-      terms: form.terms.trim() || "No special conditions.",
-      autoReply: form.autoReply.trim() || undefined,
-    };
+    try {
+      const response = await fetch("/api/ads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          side: form.side,
+          priceType: form.priceType,
+          price: Number(resolvedPrice.toFixed(3)),
+          margin: form.priceType === "floating" ? Number(form.margin) || 0 : null,
+          totalAmount,
+          minLimit,
+          maxLimit,
+          windowMinutes: form.windowMinutes,
+          paymentMethods: form.paymentMethods,
+          terms: form.terms.trim() || "No special conditions.",
+          autoReply: form.autoReply.trim() || null,
+        }),
+      });
 
-    publishAd(draft);
-    router.push("/p2p/orders");
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: string };
+        setPublishError(
+          response.status === 401
+            ? "Connect your wallet to publish an ad."
+            : (body.error ?? "Could not publish."),
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      invalidateAds();
+      router.push("/dashboard");
+    } catch {
+      setPublishError("Could not reach the server.");
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -602,6 +638,15 @@ export function PostAdScreen() {
           </>
         ) : null}
       </div>
+
+      {publishError ? (
+        <p
+          role="alert"
+          className="mt-4 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-xs text-destructive"
+        >
+          {publishError}
+        </p>
+      ) : null}
 
       <div className="mt-6 flex items-center justify-between gap-3">
         <Button

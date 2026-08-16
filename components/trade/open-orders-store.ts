@@ -12,6 +12,19 @@ export interface OpenOrder {
   method: string;
   status: EscrowStatus;
   createdAt: number;
+  /**
+   * What the offer looked like when the trade was opened.
+   *
+   * Denormalised for the same reason `trades` is in the database: an ad can be
+   * edited or taken down, and this row has to keep showing what was agreed.
+   * It also means the list renders without a lookup per row.
+   */
+  snapshot?: {
+    mode: "buy" | "sell";
+    price: number;
+    nickname: string;
+    address: string;
+  };
 }
 
 /**

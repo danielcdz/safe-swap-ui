@@ -217,3 +217,42 @@ export async function closeAd(
   if (error) throw new Error(`Could not take the ad down: ${error.message}`);
   return (data?.length ?? 0) > 0;
 }
+
+/**
+ * One order by ad id, for the trade screen.
+ *
+ * Deliberately not filtered by status: a trade opened against an ad that has
+ * since been taken down must still render. The book filters status; this does
+ * not.
+ */
+export async function getOrderById(id: string): Promise<P2POrder | null> {
+  const { data, error } = await supabaseAdmin()
+    .from("ads")
+    .select(
+      "id, advertiser, side, price_type, price, margin_percent, total_amount," +
+        " min_limit, max_limit, window_minutes, payment_methods, terms," +
+        " traders!inner(nickname)",
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw new Error(`Could not load the ad: ${error.message}`);
+  if (!data) return null;
+
+  const row = data as unknown as AdRow & {
+    advertiser: string;
+    traders: { nickname: string } | { nickname: string }[];
+  };
+  const trader = Array.isArray(row.traders) ? row.traders[0] : row.traders;
+
+  return toOrder({
+    ...row,
+    nickname: trader?.nickname ?? "Unknown",
+    // The trust block belongs to the book. A trade screen already shows the
+    // counterparty's record in its own right.
+    verified: false,
+    ops_count: 0,
+    completion_rate: null,
+    positive_feedback: null,
+  } as BookRow);
+}

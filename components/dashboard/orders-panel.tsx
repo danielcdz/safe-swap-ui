@@ -7,7 +7,6 @@ import { buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TabBar } from "@/components/ui/tab-bar";
 import { EscrowStatusBadge } from "@/components/trade/escrow-status-badge";
-import { buildTrade } from "@/components/trade/build-trade";
 import {
   isOpenStatus,
   removeOpenOrder,
@@ -15,7 +14,6 @@ import {
   useOpenOrders,
 } from "@/components/trade/open-orders-store";
 import type { EscrowStatus } from "@/components/trade/types";
-import { MOCK_ORDERS } from "@/components/p2p/mock-orders";
 import { MARKET } from "@/components/p2p/types";
 import { SIDE_TONE } from "@/components/p2p/side";
 import { cn } from "@/lib/utils";
@@ -29,12 +27,21 @@ export function OrdersPanel() {
 
   const showingOpen = tabIndex === 0;
 
+  // Records written before snapshots existed cannot be rendered, and there is
+  // nothing left to look them up in — skip rather than guess.
   const all = orders.flatMap((record) => {
-    const order = MOCK_ORDERS.find(
-      (candidate) => candidate.id === record.orderId,
-    );
-    if (!order) return [];
-    return [{ record, trade: buildTrade(order, record.amount, record.method) }];
+    if (!record.snapshot) return [];
+    const { mode, price, nickname } = record.snapshot;
+    const isBuy = mode === "buy";
+    return [
+      {
+        record,
+        mode,
+        nickname,
+        fiatAmount: isBuy ? record.amount : record.amount * price,
+        assetAmount: isBuy ? record.amount / price : record.amount,
+      },
+    ];
   });
 
   const rows = all.filter(
@@ -84,7 +91,7 @@ export function OrdersPanel() {
     >
       {rows.length > 0 ? (
         <ul className="divide-y divide-border">
-          {rows.map(({ record, trade }) => {
+          {rows.map(({ record, mode, nickname, fiatAmount, assetAmount }) => {
             const cancellable = record.status === "pending";
             const href = `/trades/${record.orderId}?amount=${record.amount}&method=${encodeURIComponent(record.method)}`;
 
@@ -96,22 +103,22 @@ export function OrdersPanel() {
                 <span
                   className={cn(
                     "rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                    SIDE_TONE[trade.mode].pill,
+                    SIDE_TONE[mode].pill,
                   )}
                 >
-                  {SIDE_TONE[trade.mode].label}
+                  {SIDE_TONE[mode].label}
                 </span>
 
                 <div className="flex min-w-40 flex-1 flex-col">
                   <span className="text-sm font-semibold tabular-nums">
-                    {formatFiat(trade.fiatAmount)}
+                    {formatFiat(fiatAmount)}
                     <span className="font-normal text-muted-foreground">
                       {" · "}
-                      {formatAsset(trade.assetAmount)} {MARKET.asset}
+                      {formatAsset(assetAmount)} {MARKET.asset}
                     </span>
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                    {trade.counterparty.nickname} · {trade.paymentMethod}
+                    {nickname} · {record.method}
                   </span>
                 </div>
 
@@ -128,8 +135,8 @@ export function OrdersPanel() {
                   type="button"
                   aria-label={
                     cancellable
-                      ? `Cancel order with ${trade.counterparty.nickname}`
-                      : `Remove order with ${trade.counterparty.nickname} from this list`
+                      ? `Cancel order with ${nickname}`
+                      : `Remove order with ${nickname} from this list`
                   }
                   title={cancellable ? "Cancel order" : "Remove from list"}
                   onClick={() => closeOrder(record.orderId, record.status)}
@@ -165,8 +172,8 @@ export function OrdersPanel() {
         description={
           confirmingRow ? (
             <>
-              The escrow refunds {formatAsset(confirmingRow.trade.assetAmount)}{" "}
-              {MARKET.asset} to {confirmingRow.trade.counterparty.nickname} and
+              The escrow refunds {formatAsset(confirmingRow.assetAmount)}{" "}
+              {MARKET.asset} to {confirmingRow.nickname} and
               this order closes. Cancelling often can affect your completion
               rate.
             </>
