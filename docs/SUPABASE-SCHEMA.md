@@ -136,8 +136,14 @@ invariants are constraints:
 not an unfinished job.
 
 Because identity is a wallet, `auth.uid()` is always null and a policy has
-nothing to match on. Access runs through the Next.js server using the
-service-role key, which bypasses RLS.
+nothing to match on. Access runs through the Next.js server using a **secret
+key** (`sb_secret_…`), which bypasses RLS.
+
+Secret keys replace the legacy `service_role` JWT, which is deprecated at the
+end of 2026. Both bypass RLS through the same Postgres role, but a secret key
+can be rotated and revoked on its own, and Supabase rejects it outright when
+sent from a browser — so a leak into client code fails loudly rather than
+quietly working.
 
 The advisor therefore reports **six `rls_enabled_no_policy` INFO lints, and
 they are expected.** Do not "fix" them by dropping RLS.
@@ -191,7 +197,7 @@ schema. That was the only WARN and it is cleared.
 
 1. Seed traders and ads from the fixtures.
 2. Add the Supabase server client and env vars (`SUPABASE_URL`,
-   `SUPABASE_SERVICE_ROLE_KEY` — server-only, never `NEXT_PUBLIC_`).
+   `SUPABASE_SECRET_KEY` — server-only, never `NEXT_PUBLIC_`).
 3. Move domain types from `components/*/types.ts` to `lib/domain/` so route
    handlers can import them without reaching into UI folders.
 4. Replace the four seams with queries, one at a time, order book first.
