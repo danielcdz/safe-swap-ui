@@ -1,5 +1,7 @@
 # Supabase setup
 
+For where the build stands overall, see [`STATUS.md`](./STATUS.md).
+
 How to connect. For what is actually in the database and why, see
 [`SUPABASE-SCHEMA.md`](./SUPABASE-SCHEMA.md).
 

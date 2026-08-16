@@ -1,5 +1,7 @@
 # SafeSwap — database
 
+For where the build stands overall, see [`STATUS.md`](./STATUS.md).
+
 What exists in Supabase, and why it is shaped this way. Companion to
 [`UI-REBUILD-SPEC.md`](./UI-REBUILD-SPEC.md) (the frontend) and
 [`SUPABASE-SETUP.md`](./SUPABASE-SETUP.md) (connecting the MCP server).
@@ -17,9 +19,10 @@ fix the document.
 | API URL | `https://wxgwzrlkdajxtplnixfd.supabase.co` |
 | Postgres | 17.6 |
 | Applied | 2026-08-15 |
-| Tables | 6, all with RLS enabled |
-| Rows | **0 — nothing is seeded** |
-| App wiring | **none yet** — the UI still reads its mock files |
+| Tables | 7, all with RLS enabled |
+| Views | `trader_stats`, `order_book` |
+| Seed data | **none, deliberately** — the book is empty until someone publishes |
+| App wiring | ads, the order book and identity are live; trades and chat are not |
 
 Migrations, matching `supabase/migrations/` by filename:
 
@@ -188,9 +191,10 @@ schema. That was the only WARN and it is cleared.
 - **Seed data.** Every table is empty. The fixtures in
   `components/p2p/mock-orders.ts` and `components/profile/mock-profile.ts` are
   the obvious source.
-- **App wiring.** Nothing in the app talks to Supabase. The four seams are
-  `components/p2p/mock-orders.ts`, `components/trade/open-orders-store.ts`,
-  `components/ads/ads-store.ts`, and `components/profile/mock-profile.ts`.
+- **Trades and chat.** `trades` and `trade_messages` exist and are unused —
+  `components/trade/open-orders-store.ts` is the last localStorage holdout.
+- **Trader statistics.** `trader_stats` computes them; the profile screen still
+  reads fixtures from `components/profile/mock-profile.ts`.
 - **No payment-methods table** — they are a `text[]` on `ads`, GIN-indexed for
   filtering. Promote to a table if they need metadata.
 - **No auth, storage, or Realtime.** Realtime is the plausible next one, for

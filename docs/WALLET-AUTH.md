@@ -1,5 +1,7 @@
 # Wallet connection and authentication
 
+For where the build stands overall, see [`STATUS.md`](./STATUS.md).
+
 How SafeSwap connects to Freighter, and how the server learns which wallet it
 is actually talking to.
 

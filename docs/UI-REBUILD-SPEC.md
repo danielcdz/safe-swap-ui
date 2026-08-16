@@ -6,7 +6,7 @@ This started as a plan for rebuilding the SafeSwap interface from an earlier cod
 
 **Scope:** UI only. Wallet connectors, escrow/blockchain calls, API routes, and database wiring are deliberately excluded — see [Out of scope](#9-out-of-scope) for the seams left open.
 
-A Supabase database now exists but nothing in the app talks to it yet — see [`SUPABASE-SCHEMA.md`](./SUPABASE-SCHEMA.md). The wallet connector is still mocked; [`WALLET-AUTH.md`](./WALLET-AUTH.md) covers how the real one will work.
+For where the build actually stands, start at [`STATUS.md`](./STATUS.md). Ads, the order book and identity are served from Supabase ([`SUPABASE-SCHEMA.md`](./SUPABASE-SCHEMA.md)); sign-in is real ([`WALLET-AUTH.md`](./WALLET-AUTH.md)). Trades, chat and escrow are still mocked.
 
 ---
 
@@ -319,6 +319,11 @@ All paths under `components/`.
 | **OrderTradePanel** (`p2p/order-trade-panel.tsx`) | Inline trade form. Trader's terms left, sizing right. See [§5.1](#51-the-amount-clamp). |
 | **MarketStats** (`p2p/market-stats.tsx`) | Best price / offers / average release, computed from the **visible** rows so the headline price is always actionable. |
 | **ActivitySummary** (`p2p/activity-summary.tsx`) | The book's only view of your own state: open orders, live ads, disputes when non-zero, and a link to the dashboard. Renders nothing when there is no activity. |
+
+The book is served by `GET /api/ads`, which reads the `order_book` view. Side
+and payment method filter server-side; the amount filter narrows what is
+already on screen. There are no fixtures — `mock-orders.ts` is deleted, and an
+empty database means an empty book.
 | **SIDE_TONE** (`p2p/side.ts`) | The one map deciding that **buy is green and sell is red** — label, button variant, tab tone, pill tint, text colour. Every side-stating surface reads from it. |
 
 The panel is one `rounded-2xl` card with `divide-y` rows rather than a stack of separate cards: it keeps the density of a table inside the card language.
@@ -461,7 +466,12 @@ The earlier app's scroll-triggered `Reveal` wrapper was not carried over — not
 - **No `Date.now()` in a render body.** It is impure and lint enforces it. Resolve timestamps once when a message is created — in an event handler or a lazy `useState` initializer, both of which are fine.
 - **No `setState` in an effect.** Lint enforces this too. Reach for `useSyncExternalStore` when you need external state.
 - **Anything timezone- or clock-dependent renders only after mount**, behind `useMounted()` (`lib/use-mounted.ts`). The server cannot know the viewer's timezone, so formatting a time during SSR is a guaranteed mismatch. Where a date is fixed rather than live, pin the formatter's `timeZone` instead — deterministic, and no mount guard needed.
-- **Persisted UI state goes through an external store**, never a `useState` seeded from `localStorage`. `lib/use-collapsed.ts` (keyed, for panels), the orders and ads stores, and the nickname and verification stores all follow the same shape.
+- **Persisted UI state goes through an external store**, never a `useState` seeded from `localStorage`. `lib/use-collapsed.ts` (keyed, for panels) and the trades and verification stores follow this shape.
+- **Anything cached per-account goes through `lib/scoped-store.ts`.** A plain
+  module cache fetches once and then serves the previous trader's data after an
+  account switch, under the new trader's address. The scoped store binds a
+  value to the session it was loaded under and drops it the moment that
+  changes.
 - **Validate against Unicode classes, not ASCII ranges.** This market writes José and Andrés; `[a-zA-Z]` is a bug waiting to be filed.
 
 ### Accessibility — hold the line
@@ -518,7 +528,8 @@ Each of these was a known flaw in the earlier app, fixed here on day one:
 - **Contrast.** Neither the brand-green nor the sell-red solid button clears 4.5:1 against white text. Inherited from the brand palette; fixing it means darkening both fills.
 - **Sorting controls.** The book always sorts by best price. The reference exposes a sort selector.
 - **`PaymentBubble`.** Inline payment and payment-request bubbles with Pay/Reject actions — the richest chat feature, still unbuilt.
-- **Published ads do not appear in the public book.** The blocker is a product decision, not effort: your own ad in a book you can trade against means trading with yourself. Either give it a "Yours" treatment with the action disabled, or filter it from the taker's view. The former is more honest about how a P2P book works.
+- ~~Published ads do not appear in the public book.~~ **Resolved:** they do, and your own are filtered out of the book you browse — you cannot trade with yourself.
+- **The payment rails and the market currency disagree.** Rails are Costa Rican, including SINPE Móvil, which settles in colones; `MARKET.fiat` is still `USD`. See [`STATUS.md`](./STATUS.md) §3.
 - **No public trader view.** `/traders/[address]` does not exist, though the profile's record tiles are already the shape it needs.
 - **Verification status is client-held.** Fine for the UI, meaningless as a security boundary — a real build reads it from the KYC provider and never trusts the client.
 
