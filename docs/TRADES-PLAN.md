@@ -16,9 +16,9 @@ for a prototype among testers; it is not a detail to leave implied.
 
 Two consequences the UI must own:
 
-1. A standing notice on the trade screen: funds are not held by SafeSwap, and
+1. ✅ A standing notice on the trade screen: funds are not held by SafeSwap, and
    the first mover is trusting the counterparty.
-2. **"Escrow coming soon"** on the escrow panel, so the absence reads as
+2. ✅ **"Escrow coming soon"** on the escrow panel, so the absence reads as
    deliberate rather than missing.
 
 **Nothing escrow-related gets deleted.** `EscrowStepper`,
@@ -154,11 +154,11 @@ problem polling solves.
 1. Migration — states, timestamps, `settlement`, payment details, atomic
    inventory decrement
 2. `roleFor()` and `POST /api/trades`
-3. Trade screen reads a real trade, for both parties
-4. Messages: table-backed, polling, both sides
-5. `advance` with per-role validation, the trust notice, and "escrow coming
+3. ✅ Trade screen reads a real trade, for both parties
+4. ✅ Messages: table-backed, polling, both sides
+5. ✅ `advance` with per-role validation, the trust notice, and "escrow coming
    soon"
-6. Payment details on the profile, disclosed only to an active counterparty
+6. ✅ Payment details on the profile, disclosed only to an active counterparty
 7. Retire `open-orders-store` — the last localStorage holdout
 
 ---

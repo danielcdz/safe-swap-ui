@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { useWallet } from "@/components/wallet/wallet-provider";
 import { joinedLabel, PROFILE } from "./mock-profile";
 import { updateNickname, useProfile } from "./profile-store";
+import { PaymentDetailsCard } from "./payment-details-card";
 import { validateNickname } from "@/lib/nickname";
 import { VerificationDialog } from "./verification-dialog";
 import {
@@ -270,6 +271,12 @@ export function ProfileScreen() {
           )}
         </Button>
       </section>
+
+      {profile ? (
+        <div className="mt-6">
+          <PaymentDetailsCard profile={profile} />
+        </div>
+      ) : null}
 
       {/* Record */}
       <h2 className="mt-8 mb-3 text-sm font-semibold">Trading record</h2>
