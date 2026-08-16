@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
-  setMethodStatus,
+  requestVerification,
   useVerification,
   VERIFICATION_METHODS,
   verifiedCount,
@@ -36,15 +36,23 @@ export function VerificationDialog({
 }) {
   const statuses = useVerification();
   const done = verifiedCount(statuses);
+  const [busy, setBusy] = React.useState<MethodId | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
   /**
-   * Seam: each of these opens the provider's flow — an email round trip, an
-   * SMS code, a document upload and review. Mocked as submit-then-approve so
-   * the pending state is reachable.
+   * Records the request and stops there.
+   *
+   * Seam: completing a check is the provider's job — an email round trip, an
+   * SMS code, a document review. None of them are wired up, so a requested
+   * method stays `pending`. It does not fake its way to verified: the badge is
+   * what other traders read as "someone checked this person", and the app has
+   * checked nothing.
    */
-  function startVerification(id: MethodId) {
-    setMethodStatus(id, "pending");
-    setTimeout(() => setMethodStatus(id, "verified"), 1600);
+  async function startVerification(id: MethodId) {
+    setBusy(id);
+    setError(null);
+    setError((await requestVerification(id)) ?? null);
+    setBusy(null);
   }
 
   return (
@@ -60,6 +68,18 @@ export function VerificationDialog({
         </Button>
       }
     >
+      {error ? (
+        <p role="alert" className="mb-3 text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+
+      <p className="mb-3 text-xs text-muted-foreground">
+        Checks are recorded but not yet carried out — email, SMS, and document
+        review arrive with their providers. Requested steps stay pending until
+        then.
+      </p>
+
       <ul className="flex flex-col gap-2">
         {VERIFICATION_METHODS.map((method) => {
           const status = statuses[method.id];
@@ -104,15 +124,17 @@ export function VerificationDialog({
               ) : status === "pending" ? (
                 <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-xs font-semibold text-warning">
                   <Loader2 aria-hidden className="size-3.5 animate-spin" />
-                  In review
+                  Requested
                 </span>
               ) : (
                 <Button
                   size="sm"
                   className="shrink-0"
+                  disabled={!method.requestable || busy !== null}
+                  aria-busy={busy === method.id}
                   onClick={() => startVerification(method.id)}
                 >
-                  Verify
+                  {busy === method.id ? "Requesting…" : "Verify"}
                 </Button>
               )}
             </li>

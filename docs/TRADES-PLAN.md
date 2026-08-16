@@ -163,9 +163,12 @@ problem polling solves.
 
    Trade state was never the client's to own: the other party advancing a
    trade has to show up in your list, and a record confined to one browser
-   could not do that. `components/profile/verification.ts` is still on
-   localStorage and has the same problem — a self-attested badge no one else
-   can see — but that is its own piece of work.
+   could not do that.
+
+8. ✅ Verification off localStorage too, and made unforgeable — a trader can
+   request a check, but only the server can grant one. What remains in
+   localStorage is UI preference: panel collapse and the wallet reconnect
+   flag.
 
 ---
 
