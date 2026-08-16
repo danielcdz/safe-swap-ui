@@ -90,17 +90,16 @@ alter type escrow_status add value 'open';
 - `asset_tx_hash` — the Stellar transaction, so the buyer can verify it on a
   block explorer rather than taking the seller's word
 
-**`traders` gains payment details**, since the buyer needs somewhere to send
-money:
+**`traders` stores no payment details.** Revised 2026-08-16: they were added
+and then dropped again (migration `20260816234721`). The buyer does need
+somewhere to send money — but they get it from the seller in the trade chat,
+at the moment of trading.
 
-- `sinpe_phone`
-- `bank_account`
-- `bank_name`
-
-> **This is PII in the database.** It is only ever disclosed to the
-> counterparty of an active trade, never through the order book or a public
-> profile. The API must enforce that, because a trader's payment details are
-> exactly the thing a scraper would want.
+> **The best way to protect PII is not to hold it.** A stored SINPE number is
+> exactly what a scraper wants, has to be defended on every endpoint forever,
+> and can be handed to the wrong counterparty by any future bug. Held only in
+> a trade's messages, it is disclosed by the person it belongs to, to one
+> counterparty, scoped to one trade.
 
 **Inventory must decrement atomically.** Nothing currently stops two takers
 each claiming an ad's full amount. One `UPDATE` that checks and decrements and
@@ -117,8 +116,8 @@ GET    /api/trades/[id]               participants only
 POST   /api/trades/[id]/advance       one step, validated against your role
 GET    /api/trades/[id]/messages      participants only
 POST   /api/trades/[id]/messages
-GET    /api/traders/me                gains payment details
-PATCH  /api/traders/me                gains payment details
+GET    /api/traders/me                nickname only — no payment details
+PATCH  /api/traders/me                nickname only — no payment details
 ```
 
 Every route authorises on "am I maker or taker of this trade", the same shape
@@ -158,7 +157,10 @@ problem polling solves.
 4. ✅ Messages: table-backed, polling, both sides
 5. ✅ `advance` with per-role validation, the trust notice, and "escrow coming
    soon"
-6. ✅ Payment details on the profile, disclosed only to an active counterparty
+6. ✅ Payment details on the profile — then **reversed**: they are agreed in
+   the trade chat instead, and the columns were dropped. The trade screen
+   points the buyer at the chat and warns them to use only what the seller
+   sends there.
 7. ✅ Retire `open-orders-store` — trades now come from the database
 
    Trade state was never the client's to own: the other party advancing a

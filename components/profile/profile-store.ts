@@ -7,10 +7,6 @@ export interface TraderProfile {
   address: string;
   nickname: string;
   joinedAt: string;
-  /** Your own details in full — this endpoint only ever returns yours. */
-  sinpePhone: string | null;
-  bankName: string | null;
-  bankAccount: string | null;
 }
 
 async function loadProfile(): Promise<TraderProfile | null> {
@@ -41,18 +37,18 @@ export function useNickname() {
 }
 
 /**
- * Patches the signed-in trader. Resolves with an error message, or undefined
- * on success. The server decides — nothing is written optimistically, because
- * a value that silently reverted would be worse than a moment of latency.
+ * Renames the signed-in trader. Resolves with an error message, or undefined
+ * on success. The server decides — this does not write optimistically, because
+ * a name that silently reverted would be worse than a moment of latency.
  */
-export async function updateProfile(
-  patch: Partial<Omit<TraderProfile, "address" | "joinedAt">>,
+export async function updateNickname(
+  nickname: string,
 ): Promise<string | undefined> {
   try {
     const response = await fetch("/api/traders/me", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(patch),
+      body: JSON.stringify({ nickname }),
     });
 
     const data = (await response.json()) as TraderProfile & { error?: string };
@@ -65,6 +61,5 @@ export async function updateProfile(
   }
 }
 
-export const updateNickname = (nickname: string) => updateProfile({ nickname });
 
 export const refreshProfile = store.invalidate;

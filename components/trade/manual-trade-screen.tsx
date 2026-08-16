@@ -47,6 +47,33 @@ function headingFor(trade: TradeRecord) {
   return `Waiting for ${other.nickname}`;
 }
 
+/** Inline, copyable — for a value that belongs inside a sentence. */
+function CopyValue({ value }: { value: string }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        await navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      aria-label={`Copy ${value}`}
+      className="group inline-flex cursor-pointer items-center gap-1 rounded font-medium text-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+    >
+      {value}
+      {copied ? (
+        <Check aria-hidden className="size-3.5 shrink-0 text-primary" />
+      ) : (
+        <Copy
+          aria-hidden
+          className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+        />
+      )}
+    </button>
+  );
+}
+
 function CopyLine({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = React.useState(false);
   return (
@@ -156,11 +183,6 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
   }
 
   const chat = useTradeMessages(trade.id, trade.viewer);
-
-  const details = trade.sellerPaymentDetails;
-  const hasDetails = Boolean(
-    details.sinpePhone ?? (details.bankName && details.bankAccount),
-  );
 
   return (
     <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-8 sm:px-6">
@@ -298,31 +320,19 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
                 <Smartphone aria-hidden className="size-4 text-primary" />
                 Send {formatFiat(trade.fiatAmount)} to {counterparty.nickname}
               </h2>
-              {hasDetails ? (
-                <div className="flex flex-col gap-2">
-                  {details.sinpePhone ? (
-                    <CopyLine label="SINPE Móvil" value={details.sinpePhone} />
-                  ) : null}
-                  {details.bankName ? (
-                    <div className="flex justify-between gap-3 text-sm">
-                      <span className="text-muted-foreground">Bank</span>
-                      <span className="font-medium">{details.bankName}</span>
-                    </div>
-                  ) : null}
-                  {details.bankAccount ? (
-                    <CopyLine label="Account" value={details.bankAccount} />
-                  ) : null}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Include the reference {trade.reference} so they can match it.
-                  </p>
-                </div>
-              ) : (
-                <p className="flex items-start gap-2 text-xs text-destructive">
-                  <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
-                  {counterparty.nickname} has not added payment details yet. Ask
-                  them in the chat before sending anything.
-                </p>
-              )}
+              {/* SafeSwap never holds the account details, so it cannot show
+                  them here. The two of you agree them in the chat. */}
+              <p className="text-sm text-muted-foreground">
+                Ask {counterparty.nickname} in the chat where to send it — a
+                SINPE Móvil number or a bank account. Include the reference{" "}
+                <CopyValue value={trade.reference} /> so they can match your
+                transfer.
+              </p>
+              <p className="flex items-start gap-2 text-xs text-warning">
+                <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
+                Only use details {counterparty.nickname} sends in this chat.
+                Nobody from SafeSwap will ever message you asking for a payment.
+              </p>
             </section>
           ) : null}
 

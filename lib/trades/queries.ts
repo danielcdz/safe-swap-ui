@@ -21,12 +21,6 @@ export interface TradeParticipant {
   nickname: string;
 }
 
-export interface PaymentDetails {
-  sinpePhone: string | null;
-  bankName: string | null;
-  bankAccount: string | null;
-}
-
 export interface TradeRecord {
   id: string;
   reference: string;
@@ -45,13 +39,10 @@ export interface TradeRecord {
   buyer: TradeParticipant;
   seller: TradeParticipant;
   /**
-   * Where the buyer sends the fiat.
-   *
-   * Only the *seller's* details are ever disclosed, and only to the two people
-   * in this trade. The seller needs nothing from the buyer but a wallet
-   * address, which is already public — so the buyer's own details stay private.
+   * Note: there is no payment-detail field, by design. Where the fiat goes is
+   * agreed in the trade chat between the two people who need to know, so the
+   * app never stores a phone number or an account number at all.
    */
-  sellerPaymentDetails: PaymentDetails;
   assetTxHash: string | null;
   createdAt: string;
   fiatSentAt: string | null;
@@ -118,20 +109,14 @@ export async function getTradeFor(
 
   const { data: people, error: peopleError } = await supabase
     .from("traders")
-    .select("address, nickname, sinpe_phone, bank_name, bank_account")
+    .select("address, nickname")
     .in("address", [row.maker, row.taker]);
 
   if (peopleError) {
     throw new Error(`Could not load participants: ${peopleError.message}`);
   }
 
-  type Person = {
-    address: string;
-    nickname: string;
-    sinpe_phone: string | null;
-    bank_name: string | null;
-    bank_account: string | null;
-  };
+  type Person = { address: string; nickname: string };
   const byAddress = new Map((people as Person[]).map((p) => [p.address, p]));
   const sellerRow = byAddress.get(sellerAddress);
   const buyerRow = byAddress.get(buyerAddress);
@@ -156,11 +141,6 @@ export async function getTradeFor(
     seller: {
       address: sellerAddress,
       nickname: sellerRow?.nickname ?? "Unknown",
-    },
-    sellerPaymentDetails: {
-      sinpePhone: sellerRow?.sinpe_phone ?? null,
-      bankName: sellerRow?.bank_name ?? null,
-      bankAccount: sellerRow?.bank_account ?? null,
     },
     assetTxHash: row.asset_tx_hash,
     createdAt: row.created_at,
@@ -311,6 +291,13 @@ export async function openTrade(
   if (rpcError) throw new Error(rpcError.message);
   // The reservation refused: not enough unreserved inventory left.
   if (!id) return "insufficient";
+
+  // The chat is the only place payment details exist, so say so up front
+  // rather than leaving the buyer to work out why nothing is displayed.
+  await postSystemMessage(
+    id as string,
+    "Trade opened. Agree the payment details here — SafeSwap does not store them.",
+  );
 
   return { id: id as string };
 }
