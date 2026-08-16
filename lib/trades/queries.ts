@@ -3,7 +3,12 @@ import "server-only";
 import { randomInt } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { bookModeFor, type AdSide } from "@/components/ads/types";
-import { roleFor, type TradeRole } from "@/components/trade/types";
+import {
+  MANUAL_STEPS,
+  roleFor,
+  stageOf,
+  type TradeRole,
+} from "@/components/trade/types";
 
 /** Human-readable and unique enough; the id stays the real key. */
 function newReference() {
@@ -226,4 +231,97 @@ export async function openTrade(
   if (!id) return "insufficient";
 
   return { id: id as string };
+}
+
+/* -- advancing ------------------------------------------------------------ */
+
+export type AdvanceFailure =
+  | "not-found"
+  | "stale"
+  | "not-your-turn"
+  | "not-cancellable"
+  | "not-disputable"
+  | "terminal";
+
+export type TradeAction = "next" | "cancel" | "dispute";
+
+/** Which timestamp column a status transition stamps. */
+const STAMP: Record<string, string> = {
+  fiat_sent: "fiat_sent_at",
+  fiat_confirmed: "fiat_confirmed_at",
+  asset_sent: "asset_sent_at",
+};
+
+const TERMINAL = new Set(["completed", "cancelled", "released"]);
+
+/**
+ * Moves a trade one step.
+ *
+ * `from` is the status the caller believes the trade is in. The update matches
+ * on it, so a double submit — or two tabs racing — advances exactly once; the
+ * loser gets `stale` rather than skipping a step.
+ */
+export async function advanceTrade(input: {
+  id: string;
+  viewer: string;
+  from: string;
+  action: TradeAction;
+  txHash?: string | null;
+}): Promise<{ status: string } | AdvanceFailure> {
+  const supabase = supabaseAdmin();
+
+  const trade = await getTradeFor(input.id, input.viewer);
+  if (!trade) return "not-found";
+  if (trade.status !== input.from) return "stale";
+  if (TERMINAL.has(trade.status)) return "terminal";
+
+  let next: string;
+  const patch: Record<string, unknown> = {};
+
+  if (input.action === "cancel") {
+    // Only honest before anything has moved — the same rule the escrow flow
+    // uses. Past `open`, the way out is a dispute.
+    if (trade.status !== "open") return "not-cancellable";
+    next = "cancelled";
+    patch.settled_at = new Date().toISOString();
+  } else if (input.action === "dispute") {
+    if (trade.status === "open") return "not-disputable";
+    next = "disputed";
+  } else {
+    const stage = stageOf(trade.status);
+    const step = MANUAL_STEPS[stage];
+    if (!step) return "terminal";
+
+    // The actor for this step is fixed: only the buyer can claim they paid,
+    // only the seller can confirm it arrived.
+    if (step.actor !== trade.role) return "not-your-turn";
+
+    next = MANUAL_STEPS[stage + 1]?.status ?? "completed";
+    if (STAMP[next]) patch[STAMP[next]] = new Date().toISOString();
+    if (next === "completed") patch.settled_at = new Date().toISOString();
+    if (input.txHash) patch.asset_tx_hash = input.txHash;
+  }
+
+  const { data, error } = await supabase
+    .from("trades")
+    .update({ status: next, ...patch })
+    .eq("id", input.id)
+    .eq("status", input.from)
+    .select("status");
+
+  if (error) throw new Error(`Could not advance the trade: ${error.message}`);
+  if (!data?.length) return "stale";
+
+  // Cancelling frees the inventory the trade was holding.
+  if (next === "cancelled") {
+    const { error: releaseError } = await supabase.rpc(
+      "release_trade_reservation",
+      { p_trade_id: input.id },
+    );
+    if (releaseError) {
+      console.error("reservation not released", releaseError);
+    }
+  }
+
+  return { status: next };
 }

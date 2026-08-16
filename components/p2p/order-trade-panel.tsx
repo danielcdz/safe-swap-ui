@@ -4,7 +4,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { openOrder } from "@/components/trade/open-orders-store";
 import { cn } from "@/lib/utils";
 import { formatAsset, formatFiat, formatPrice } from "@/lib/format";
 import { MARKET, type P2POrder } from "./types";
@@ -74,6 +73,7 @@ export function OrderTradePanel({
   const [input, setInput] = React.useState("");
   const [method, setMethod] = React.useState(order.paymentMethods[0]);
   const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | undefined>();
 
   const inventoryValue = order.available * order.price;
   const maxUsd = Math.min(order.limits.max, inventoryValue);
@@ -99,33 +99,38 @@ export function OrderTradePanel({
     : `${formatAsset(minInput)} – ${formatAsset(maxInput)} ${MARKET.asset}`;
 
   /**
-   * Seam: the real flow deploys the escrow contract, then opens the trade.
-   * With no backend to create an order against, the sized amount and chosen
-   * method travel to the trade screen in the URL.
+   * Opens the trade on the server, which reserves the inventory and works out
+   * the amounts from the ad's own price. The response is a trade id — the
+   * screen no longer reconstructs a trade from the URL.
    */
   async function handleSubmit() {
     setSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    setSubmitError(undefined);
 
-    openOrder({
-      orderId: order.id,
-      amount,
-      method,
-      status: "pending",
-      createdAt: Date.now(),
-      snapshot: {
-        mode: order.mode,
-        price: order.price,
-        nickname: order.trader.nickname,
-        address: order.trader.address,
-      },
-    });
+    try {
+      const response = await fetch("/api/trades", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ adId: order.id, amount, paymentMethod: method }),
+      });
 
-    const query = new URLSearchParams({
-      amount: String(amount),
-      method,
-    });
-    router.push(`/trades/${order.id}?${query}`);
+      const body = (await response.json()) as { id?: string; error?: string };
+
+      if (!response.ok) {
+        setSubmitError(
+          response.status === 401
+            ? "Connect your wallet to open a trade."
+            : (body.error ?? "Could not open the trade."),
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      router.push(`/trades/${body.id}`);
+    } catch {
+      setSubmitError("Could not reach the server.");
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -245,6 +250,15 @@ export function OrderTradePanel({
             })}
           </div>
         </div>
+
+        {submitError ? (
+          <p
+            role="alert"
+            className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          >
+            {submitError}
+          </p>
+        ) : null}
 
         <Button
           size="lg"
