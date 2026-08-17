@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:reset": "node --env-file=.env.local scripts/db-reset.mjs"
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",
