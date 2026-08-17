@@ -6,7 +6,7 @@ import { MARKET } from "@/components/p2p/types";
 
 export const metadata: Metadata = {
   title: "Orders",
-  description: `Buy and sell ${MARKET.asset} peer-to-peer, secured by escrow.`,
+  description: `Buy and sell ${MARKET.asset} peer-to-peer, wallet to wallet.`,
 };
 
 export default function OrdersPage() {
@@ -19,8 +19,8 @@ export default function OrdersPage() {
             {MARKET.asset} order book
           </h1>
           <p className="text-sm text-muted-foreground">
-            Trade directly with another wallet. Escrow holds the {MARKET.asset}{" "}
-            until both sides settle.
+            Trade directly with another wallet. Transfers are manual for now —
+            SafeSwap does not hold your {MARKET.asset}.
           </p>
         </div>
 

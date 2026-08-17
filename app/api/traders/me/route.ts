@@ -5,14 +5,35 @@ import { validateNickname } from "@/lib/nickname";
 
 const UNAUTHENTICATED = { error: "Not authenticated." };
 
-/** The signed-in trader's own record. */
+const COLUMNS = "address, nickname, joined_at";
+
+interface TraderRow {
+  address: string;
+  nickname: string;
+  joined_at: string;
+}
+
+/**
+ * A trader is only an address, a name, and a join date.
+ *
+ * Payment details are deliberately absent: they are agreed in the trade chat,
+ * between the two people who need them, and never stored here.
+ */
+function toProfile(row: TraderRow) {
+  return {
+    address: row.address,
+    nickname: row.nickname,
+    joinedAt: row.joined_at,
+  };
+}
+
 export async function GET() {
   const address = await getSessionAddress();
   if (!address) return NextResponse.json(UNAUTHENTICATED, { status: 401 });
 
   const { data, error } = await supabaseAdmin()
     .from("traders")
-    .select("address, nickname, joined_at")
+    .select(COLUMNS)
     .eq("address", address)
     .single();
 
@@ -21,18 +42,17 @@ export async function GET() {
     return NextResponse.json({ error: "Trader not found." }, { status: 404 });
   }
 
-  return NextResponse.json(
-    { address: data.address, nickname: data.nickname, joinedAt: data.joined_at },
-    { headers: { "cache-control": "no-store" } },
-  );
+  return NextResponse.json(toProfile(data as unknown as TraderRow), {
+    headers: { "cache-control": "no-store" },
+  });
 }
 
 /**
  * Renames the signed-in trader.
  *
- * The address comes from the session, so the request body cannot choose whose
- * nickname to change — `.eq("address", address)` is scoped to the caller and
- * there is no path where a body field could widen it.
+ * The address comes from the session, so the body cannot choose whose record
+ * to change — the update is scoped with `.eq("address", address)` and no body
+ * field can widen it.
  */
 export async function PATCH(request: NextRequest) {
   const address = await getSessionAddress();
@@ -45,14 +65,11 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Expected a JSON body." }, { status: 400 });
   }
 
-  const nickname = (body as { nickname?: unknown })?.nickname;
+  const { nickname } = (body ?? {}) as { nickname?: unknown };
   if (typeof nickname !== "string") {
     return NextResponse.json({ error: "nickname is required." }, { status: 400 });
   }
 
-  // Revalidated here even though the form checks it — the client's opinion is
-  // advisory, and the database CHECK would otherwise reject with a message no
-  // user should have to read.
   const trimmed = nickname.trim();
   const invalid = validateNickname(trimmed);
   if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
@@ -61,7 +78,7 @@ export async function PATCH(request: NextRequest) {
     .from("traders")
     .update({ nickname: trimmed })
     .eq("address", address)
-    .select("address, nickname, joined_at")
+    .select(COLUMNS)
     .single();
 
   if (error || !data) {
@@ -69,8 +86,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Could not save." }, { status: 500 });
   }
 
-  return NextResponse.json(
-    { address: data.address, nickname: data.nickname, joinedAt: data.joined_at },
-    { headers: { "cache-control": "no-store" } },
-  );
+  return NextResponse.json(toProfile(data as unknown as TraderRow), {
+    headers: { "cache-control": "no-store" },
+  });
 }

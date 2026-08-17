@@ -132,7 +132,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     const watcher = new WatchWalletChanges(WATCH_INTERVAL_MS);
 
-    async function restoreWallet() {
+    async function restoreWallet(hasSession: boolean) {
       const installed = await isConnected();
       if (cancelled) return;
 
@@ -143,7 +143,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
       // Only restore if this browser connected before. getAddress() does not
       // prompt, but skipping it avoids waking the extension for new visitors.
-      if (window.localStorage.getItem(RECONNECT_KEY) !== "true") {
+      //
+      // A live session counts as proof: the cookie was issued against a
+      // signature from this browser, which is strictly better evidence than a
+      // localStorage boolean — and it outlives clearing site data or a
+      // sign-out that failed halfway. Without this the two restores disagree,
+      // and the header offers "Connect wallet" on a page already loading the
+      // signed-in trader's own data.
+      if (!hasSession && window.localStorage.getItem(RECONNECT_KEY) !== "true") {
         patch({ ready: true });
         return;
       }
@@ -159,6 +166,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const net = await getNetwork();
       if (cancelled) return;
 
+      window.localStorage.setItem(RECONNECT_KEY, "true");
       patch({
         address: result.address,
         network: net.network ?? null,
@@ -191,19 +199,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     // Ask the server who it thinks we are, independently of the extension: the
     // cookie can outlive a load where Freighter is slow or locked.
-    async function restoreSession() {
+    async function restoreSession(): Promise<string | null> {
       try {
         const response = await fetch("/api/auth/session", { cache: "no-store" });
-        if (!response.ok) return;
+        if (!response.ok) return null;
         const data = (await response.json()) as { address: string | null };
-        if (!cancelled && data.address) patch({ sessionAddress: data.address });
+        if (cancelled || !data.address) return null;
+        patch({ sessionAddress: data.address });
+        return data.address;
       } catch {
         // Offline, or the route is unavailable — stay unauthenticated.
+        return null;
       }
     }
 
-    void restoreWallet();
-    void restoreSession();
+    // Session first: its answer decides whether the extension is worth waking.
+    // It also means a locked or slow Freighter never holds up knowing who the
+    // server thinks we are.
+    void restoreSession().then((sessionAddress) => {
+      if (!cancelled) void restoreWallet(Boolean(sessionAddress));
+    });
 
     return () => {
       cancelled = true;

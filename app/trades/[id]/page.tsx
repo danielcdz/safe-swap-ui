@@ -1,39 +1,39 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
-import { getOrderById } from "@/lib/ads/queries";
-import { TradeScreen } from "@/components/trade/trade-screen";
-import { buildTrade } from "@/components/trade/build-trade";
+import { getSessionAddress } from "@/lib/auth/session";
+import { getTradeFor } from "@/lib/trades/queries";
+import { ManualTradeScreen } from "@/components/trade/manual-trade-screen";
 
 export const metadata: Metadata = {
   title: "Trade",
-  description: "Active escrow-secured trade.",
+  description: "An active peer-to-peer trade.",
 };
 
 /**
- * The amount and payment method are chosen in the order book and travel here
- * as search params — there is no backend to create the order against yet, so
- * the URL is what carries the trade.
+ * A trade, for one of its two participants.
+ *
+ * The id is a trade id — it used to be an ad id, back when the flow was mocked
+ * and the trade existed only in the URL.
  */
 export default async function TradePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ amount?: string; method?: string }>;
 }) {
+  const viewer = await getSessionAddress();
+  if (!viewer) redirect("/");
+
   const { id } = await params;
-  const { amount, method } = await searchParams;
-
-  const order = await getOrderById(id);
-  if (!order) notFound();
-
-  const trade = buildTrade(order, Number(amount), method);
+  const trade = await getTradeFor(id, viewer);
+  // 404 rather than 403 for a trade that is not yours: confirming it exists
+  // would leak that two particular wallets are trading.
+  if (!trade) notFound();
 
   return (
     <>
       <AppHeader />
-      <TradeScreen trade={trade} />
+      <ManualTradeScreen initial={trade} />
     </>
   );
 }

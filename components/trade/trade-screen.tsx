@@ -1,5 +1,20 @@
 "use client";
 
+/**
+ * SUPERSEDED by manual-trade-screen.tsx, and kept deliberately.
+ *
+ * This is the escrow composition: the lifecycle, the stepper wired to
+ * ESCROW_STEPS, and the release/dispute actions. Escrow is deferred rather
+ * than abandoned, so the assembled version stays here as the starting point
+ * for bringing it back. Nothing routes to it.
+ *
+ * Its lifecycle is local state only. It used to persist through the
+ * localStorage open-orders store, which has since been retired — a trade has
+ * two sides, and one browser's copy could never show the other party's moves.
+ * When escrow returns, this resumes from `trades.status` the way
+ * manual-trade-screen already does.
+ */
+
 import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -10,7 +25,6 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatAsset } from "@/lib/format";
 import { useMounted } from "@/lib/use-mounted";
 import { cn } from "@/lib/utils";
-import { setOpenOrderStatus, useOpenOrders } from "./open-orders-store";
 import { EscrowStatusBadge } from "./escrow-status-badge";
 import { EscrowStepper } from "./escrow-stepper";
 import { TradeSummary } from "./trade-summary";
@@ -18,15 +32,6 @@ import type { EscrowStatus, Trade, TradeMessage } from "./types";
 
 /** Stage 2 = deploy and fund are done; the fiat leg is what's outstanding. */
 const INITIAL_STAGE = 2;
-
-/** How far along a stored status says the lifecycle already is. */
-const STAGE_BY_STATUS: Record<EscrowStatus, number> = {
-  pending: 2,
-  funded: 3,
-  disputed: 3,
-  cancelled: 2,
-  released: 4,
-};
 
 /** Runs inside a lazy state initializer, so reading the clock here is fine. */
 function initialMessages(trade: Trade): TradeMessage[] {
@@ -110,17 +115,9 @@ export function TradeScreen({ trade }: { trade: Trade }) {
     initialMessages(trade),
   );
 
-  // Resume has to land where the trade actually is. The stored record sets
-  // the floor; anything done in this session can only move it forward.
-  const stored = useOpenOrders().find(
-    (record) => record.orderId === trade.orderId,
-  );
-  const stage = Math.max(
-    localStage,
-    stored ? STAGE_BY_STATUS[stored.status] : INITIAL_STAGE,
-  );
-  const disputed = localDisputed || stored?.status === "disputed";
-  const cancelled = localCancelled || stored?.status === "cancelled";
+  const stage = localStage;
+  const disputed = localDisputed;
+  const cancelled = localCancelled;
 
   const status: EscrowStatus = cancelled
     ? "cancelled"
@@ -138,10 +135,9 @@ export function TradeScreen({ trade }: { trade: Trade }) {
     push({ author: "self", text, delivery: "sent" });
   }
 
-  /** Advances the stepper and keeps the open-orders record in step. */
+  /** Seam: this is where the escrow lifecycle gets written back. */
   function advanceTo(next: number) {
     setLocalStage(next);
-    setOpenOrderStatus(trade.orderId, statusFor(next, false));
   }
 
   /**
@@ -173,7 +169,6 @@ export function TradeScreen({ trade }: { trade: Trade }) {
 
   function raiseDispute() {
     setLocalDisputed(true);
-    setOpenOrderStatus(trade.orderId, "disputed");
     push({ author: "system", text: "Dispute raised — a resolver was notified" });
   }
 
@@ -181,7 +176,6 @@ export function TradeScreen({ trade }: { trade: Trade }) {
   function cancelOrder() {
     setLocalCancelled(true);
     setConfirmingCancel(false);
-    setOpenOrderStatus(trade.orderId, "cancelled");
     push({
       author: "system",
       text: `Order cancelled — ${MARKET.asset} refunded from escrow`,
@@ -286,7 +280,10 @@ export function TradeScreen({ trade }: { trade: Trade }) {
 
         {/* Chat */}
         <ChatPanel
-          trade={trade}
+          counterparty={{
+            address: trade.counterparty.address,
+            nickname: trade.counterparty.nickname,
+          }}
           messages={messages}
           onSend={handleSend}
           // Capped rather than viewport-filling: an uncapped panel sets the

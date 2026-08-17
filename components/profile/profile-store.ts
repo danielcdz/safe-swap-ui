@@ -41,7 +41,9 @@ export function useNickname() {
  * on success. The server decides — this does not write optimistically, because
  * a name that silently reverted would be worse than a moment of latency.
  */
-export async function updateNickname(nickname: string): Promise<string | undefined> {
+export async function updateNickname(
+  nickname: string,
+): Promise<string | undefined> {
   try {
     const response = await fetch("/api/traders/me", {
       method: "PATCH",
@@ -58,5 +60,6 @@ export async function updateNickname(nickname: string): Promise<string | undefin
     return "Could not reach the server.";
   }
 }
+
 
 export const refreshProfile = store.invalidate;

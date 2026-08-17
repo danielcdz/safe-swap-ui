@@ -2,6 +2,11 @@ import { Check, Loader2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ESCROW_STEPS, type EscrowStepStatus } from "./types";
 
+interface Step {
+  readonly label: string;
+  readonly description: string;
+}
+
 const DOT = {
   completed: "bg-primary text-primary-foreground",
   current: "bg-primary/15 text-primary ring-2 ring-primary/30",
@@ -39,17 +44,23 @@ export function EscrowStepper({
   stage,
   disputed = false,
   halted = false,
+  steps = ESCROW_STEPS,
 }: {
   stage: number;
   disputed?: boolean;
   /** Lifecycle stopped short — cancelled rather than in progress. */
   halted?: boolean;
+  /**
+   * Defaults to the escrow lifecycle. The manual settlement flow passes its
+   * own steps; the escrow ones stay for when escrow returns.
+   */
+  steps?: readonly Step[];
 }) {
   return (
     <ol data-slot="escrow-stepper" className="flex flex-col">
-      {ESCROW_STEPS.map((step, index) => {
+      {steps.map((step, index) => {
         const status = statusOf(index, stage, disputed, halted);
-        const isLast = index === ESCROW_STEPS.length - 1;
+        const isLast = index === steps.length - 1;
 
         return (
           <li

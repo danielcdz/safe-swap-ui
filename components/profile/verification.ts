@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createScopedStore } from "@/lib/scoped-store";
 
 export type VerificationStatus = "unverified" | "pending" | "verified";
 export type MethodId = "wallet" | "email" | "phone" | "id";
@@ -11,6 +12,8 @@ export interface VerificationMethod {
   description: string;
   /** Only this step earns the public Verified mark. */
   grantsBadge?: boolean;
+  /** Whether a trader can ask for it themselves. */
+  requestable?: boolean;
 }
 
 export const VERIFICATION_METHODS: VerificationMethod[] = [
@@ -23,82 +26,91 @@ export const VERIFICATION_METHODS: VerificationMethod[] = [
     id: "email",
     label: "Email address",
     description: "Where trade and dispute notifications go.",
+    requestable: true,
   },
   {
     id: "phone",
     label: "Phone number",
     description: "SMS alerts while a trade is live.",
+    requestable: true,
   },
   {
     id: "id",
     label: "Government ID",
     description: "Raises your order limits and earns the Verified mark.",
     grantsBadge: true,
+    requestable: true,
   },
 ];
 
-const DEFAULTS: Record<MethodId, VerificationStatus> = {
-  wallet: "verified",
-  email: "verified",
+/** Nothing is verified until the server says so. */
+const NONE: Record<MethodId, VerificationStatus> = {
+  wallet: "unverified",
+  email: "unverified",
   phone: "unverified",
   id: "unverified",
 };
 
-const STORAGE_KEY = "safeswap:verification";
+async function loadVerifications() {
+  const response = await fetch("/api/traders/me/verifications", {
+    cache: "no-store",
+  });
+  // 401 simply means signed out.
+  if (!response.ok) return NONE;
+  const data = (await response.json()) as {
+    verifications: Record<MethodId, VerificationStatus>;
+  };
+  return data.verifications;
+}
 
 /**
- * Verification progress, persisted client-side like the other user state.
+ * Verification progress, from the database.
  *
- * Seam: a real build reads this from the KYC provider and never trusts the
- * client for it — the statuses here only drive the UI.
+ * It used to live in localStorage, which made the badge meaningless: a mark
+ * only your own browser could see is not evidence of anything to a
+ * counterparty, and clearing site data reset it. The statuses are still only
+ * ever *written* by the server — see lib/verifications/queries.ts.
  */
-const listeners = new Set<() => void>();
-let statuses: Record<MethodId, VerificationStatus> = DEFAULTS;
-
-function read(): Record<MethodId, VerificationStatus> {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULTS;
-    const parsed = JSON.parse(raw) as Partial<Record<MethodId, VerificationStatus>>;
-    return { ...DEFAULTS, ...parsed };
-  } catch {
-    return DEFAULTS;
-  }
-}
-
-if (typeof window !== "undefined") statuses = read();
-
-function handleStorage(event: StorageEvent) {
-  if (event.key !== STORAGE_KEY) return;
-  statuses = read();
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  window.addEventListener("storage", handleStorage);
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", handleStorage);
-  };
-}
-
-export function setMethodStatus(id: MethodId, status: VerificationStatus) {
-  statuses = { ...statuses, [id]: status };
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(statuses));
-  } catch {
-    // Progress won't survive a reload.
-  }
-  for (const listener of listeners) listener();
-}
+const store = createScopedStore<Record<MethodId, VerificationStatus>>(
+  loadVerifications,
+  NONE,
+);
 
 export function useVerification() {
   return React.useSyncExternalStore(
-    subscribe,
-    () => statuses,
-    () => DEFAULTS,
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
   );
+}
+
+/**
+ * Asks for a check. Resolves with an error message, or undefined on success.
+ *
+ * The result is `pending`, never `verified` — the server refuses to grant a
+ * badge on request, so this cannot report one either.
+ */
+export async function requestVerification(
+  method: MethodId,
+): Promise<string | undefined> {
+  try {
+    const response = await fetch("/api/traders/me/verifications", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ method }),
+    });
+
+    const data = (await response.json()) as {
+      verifications?: Record<MethodId, VerificationStatus>;
+      error?: string;
+    };
+    if (!response.ok) return data.error ?? "Could not request the check.";
+
+    if (data.verifications) store.set(data.verifications);
+    return undefined;
+  } catch {
+    return "Could not reach the server.";
+  }
 }
 
 /** The public mark. Only the ID check earns it — the rest are contact details. */
