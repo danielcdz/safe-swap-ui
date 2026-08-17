@@ -18,11 +18,11 @@ fix the document.
 | Project ref | `wxgwzrlkdajxtplnixfd` |
 | API URL | `https://wxgwzrlkdajxtplnixfd.supabase.co` |
 | Postgres | 17.6 |
-| Applied | 2026-08-15 |
+| Applied | 2026-08-17 |
 | Tables | 7, all with RLS enabled |
-| Views | `trader_stats`, `order_book` |
+| Views | `trader_stats`, `order_book` — both `security_invoker` |
 | Seed data | **none, deliberately** — the book is empty until someone publishes |
-| App wiring | ads, the order book and identity are live; trades and chat are not |
+| App wiring | ads, order book, identity, verification, manual trades and chat are all live. Escrow is not. |
 
 Migrations, matching `supabase/migrations/` by filename:
 
@@ -30,6 +30,15 @@ Migrations, matching `supabase/migrations/` by filename:
 |---|---|
 | `20260815222826` | `initial_schema` |
 | `20260815222905` | `harden_touch_updated_at_search_path` |
+| `20260815232347` | `auth_challenges` |
+| `20260815232531` | `auth_challenges_store_message` |
+| `20260816173341` | `order_book_view` |
+| `20260816222447` | `manual_trade_states` |
+| `20260816222506` | `manual_trade_columns` |
+| `20260816222528` | `open_trade_function` |
+| `20260816222730` | `reserve_inventory_separately` |
+| `20260816234721` | `drop_trader_payment_details` |
+| `20260817000912` | `views_respect_caller_rls` |
 
 > **Filenames must match applied versions.** They diverged once already,
 > because the repo files were written before the migrations were applied and
@@ -68,10 +77,10 @@ trader_stats (view) = traders ⋈ trades ⋈ trade_reviews
 
 | Table | Cols | CHECKs | FKs | Holds |
 |---|---|---|---|---|
-| `traders` | 5 | 2 | 0 | Identity only — address, nickname, joined_at |
+| `traders` | 5 | 2 | 0 | Identity only — address, nickname, joined_at. **No payment details**, see §3. |
 | `trader_verifications` | 5 | 0 | 1 | One row per trader per method |
 | `ads` | 16 | 8 | 1 | Standing terms that fill the order book |
-| `trades` | 16 | 5 | 3 | A specific agreement, moving through escrow |
+| `trades` | 16+ | 5 | 3 | A specific agreement, moving through manual settlement or escrow |
 | `trade_messages` | 6 | 2 | 2 | Chat, with escrow events in the same stream |
 | `trade_reviews` | 6 | 1 | 3 | One review per counterparty per trade |
 
@@ -87,7 +96,7 @@ a view cannot. Swap for a materialized view if the read cost ever shows up.
 | `ad_side` | `buy`, `sell` |
 | `ad_status` | `active`, `paused`, `closed` |
 | `price_type` | `fixed`, `floating` |
-| `escrow_status` | `pending`, `funded`, `disputed`, `released`, `cancelled` |
+| `escrow_status` | `pending`, `funded`, `disputed`, `released`, `cancelled`, plus the manual states `open`, `fiat_sent`, `fiat_confirmed`, `asset_sent`, `completed` |
 | `message_kind` | `text`, `system` |
 | `verify_method` | `wallet`, `email`, `phone`, `id` |
 | `verify_status` | `unverified`, `pending`, `verified` |
@@ -118,6 +127,30 @@ mind.
 | trade → messages, reviews | `cascade` | Conversation belongs to its trade |
 | message → author | `set null` | The message survives; the byline goes |
 
+### Payment details are not stored at all
+
+`traders` briefly gained `sinpe_phone`, `bank_name` and `bank_account`, then
+dropped them again (`20260816234721`). Traders exchange those in the trade
+chat instead.
+
+The best way to protect PII is not to hold it. A stored SINPE number is
+exactly what a scraper wants, has to be defended on every endpoint forever,
+and can be handed to the wrong counterparty by any future bug. Held only in a
+trade's messages, the same detail is disclosed by the person it belongs to, to
+one counterparty, scoped to one trade. Do not reintroduce the columns.
+
+### Inventory is reserved separately from the total
+
+`ads.reserved_amount` is its own column rather than a decrement of
+`total_amount`. Decrementing the total breaks `ads_limit_within_inventory` —
+an ad with `max_limit` 900 and 300 left is not a valid row — and lowering
+`max_limit` to compensate would silently rewrite the advertiser's terms.
+
+`open_trade()` reserves in a single statement, so two takers cannot each claim
+the last of an ad. `release_trade_reservation()` gives it back on cancel.
+Deleting a trade does **not**, which is why `scripts/db-reset.mjs` zeroes the
+column explicitly.
+
 ### Rules live in the database, not only the app
 
 The app is one of several things that will eventually write here, so the
@@ -135,7 +168,7 @@ invariants are constraints:
 
 ## 4. Security posture
 
-**RLS is enabled on all six tables with zero policies.** This is a deny-all,
+**RLS is enabled on all seven tables with zero policies.** This is a deny-all,
 not an unfinished job.
 
 Because identity is a wallet, `auth.uid()` is always null and a policy has
@@ -148,8 +181,15 @@ can be rotated and revoked on its own, and Supabase rejects it outright when
 sent from a browser — so a leak into client code fails loudly rather than
 quietly working.
 
-The advisor therefore reports **six `rls_enabled_no_policy` INFO lints, and
+The advisor therefore reports **seven `rls_enabled_no_policy` INFO lints, and
 they are expected.** Do not "fix" them by dropping RLS.
+
+**Views must be `security_invoker`.** A Postgres view defaults to
+`SECURITY DEFINER`, running as its creator and so bypassing the deny-all on
+the tables underneath — and `anon` holds SELECT on both views. `order_book`
+and `trader_stats` were fixed in `20260817000912`; a view added without it
+starts wrong. The two remaining WARNs are on `rls_auto_enable`, Supabase's own
+event-trigger helper, which does nothing when called outside a DDL trigger.
 
 If the browser is ever given direct access, the move is: mint a JWT signed
 with the project's JWT secret carrying the wallet address, then add policies
@@ -188,11 +228,9 @@ schema. That was the only WARN and it is cleared.
 
 ## 6. Not built yet
 
-- **Seed data.** Every table is empty. The fixtures in
-  `components/p2p/mock-orders.ts` and `components/profile/mock-profile.ts` are
-  the obvious source.
-- **Trades and chat.** `trades` and `trade_messages` exist and are unused —
-  `components/trade/open-orders-store.ts` is the last localStorage holdout.
+- **Seed data — deliberately none.** The book is empty until someone publishes
+  an ad. Do not add fixtures to make screens look populated;
+  `npm run db:reset` is there to get back to empty.
 - **Trader statistics.** `trader_stats` computes them; the profile screen still
   reads fixtures from `components/profile/mock-profile.ts`.
 - **No payment-methods table** — they are a `text[]` on `ads`, GIN-indexed for
@@ -207,10 +245,9 @@ schema. That was the only WARN and it is cleared.
 
 ## 7. Suggested order of work
 
-1. Seed traders and ads from the fixtures.
-2. Add the Supabase server client and env vars (`SUPABASE_URL`,
-   `SUPABASE_SECRET_KEY` — server-only, never `NEXT_PUBLIC_`).
-3. Move domain types from `components/*/types.ts` to `lib/domain/` so route
+1. Point the profile at `trader_stats` so the record stops being fixtures.
+2. Move domain types from `components/*/types.ts` to `lib/domain/` so route
    handlers can import them without reaching into UI folders.
-4. Replace the four seams with queries, one at a time, order book first.
-5. Regenerate TypeScript types after every migration.
+3. Settle where escrow runs — `trades.escrow_contract_id` is the only slot for
+   it, and a route handler is a poor fit for long-running chain work.
+4. Regenerate TypeScript types after every migration.
