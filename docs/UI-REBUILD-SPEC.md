@@ -291,7 +291,7 @@ All paths under `components/`.
 |---|---|
 | **Button** (`ui/button.tsx`) | `cva`-based. Variants `primary` \| `sell` \| `ghost` \| `danger`; sizes `sm` \| `md` \| `lg` \| `icon`. Takes **`children`**, so it wraps icons. All variants use semantic tokens. Base keeps `rounded-full`, `active:scale-97`, and a focus ring. |
 | **TabBar** (`ui/tab-bar.tsx`) | Pill segmented control. Track `bg-primary/5 rounded-full p-1`. Props `size` (`sm` for section headers, `md` standalone) and `activeTone` (`primary` \| `destructive`) so a buy/sell switch carries its side colour. Full roving tabindex — arrows, Home, End — with `role="tablist"`/`role="tab"`. |
-| **WalletBadge** (`ui/wallet-badge.tsx`) | Deterministic avatar. Hashes the **address** — not the handle, so identity survives a rename — to pick one of four token-based colour pairs, and derives 2-letter initials. Sizes `sm` \| `md` \| `lg`. |
+| **WalletBadge** (`ui/wallet-badge.tsx`) | A trader's face. Renders their picture when `src` is given, and otherwise a deterministic badge: hashes the **address** — not the handle, so identity survives a rename — to pick one of four token-based colour pairs, and derives 2-letter initials. The badge is the permanent fallback, not a placeholder; it also catches a picture that has been removed since the page loaded. Sizes `sm` \| `md` \| `lg` \| `xl`. |
 | **InfoTip** (`ui/info-tip.tsx`) | `(i)` affordance. Opens on hover, focus, **and tap** — pointer-only tooltips are unreachable by keyboard and invisible on touch. `role="tooltip"` + `aria-describedby`; Escape and blur dismiss. Resets inherited uppercase/tracking. |
 | **Dialog** (`ui/dialog.tsx`) | Modal shell — backdrop, Escape, focus in on open and back to the opener on close, body scroll lock, optional `initialFocusRef` and footer. Every modal builds on this; do not re-implement the mechanics. |
 | **ConfirmDialog** (`ui/confirm-dialog.tsx`) | `Dialog` plus a confirm/dismiss footer, for irreversible actions. Focus lands on the confirm button. |
@@ -552,7 +552,7 @@ Deliberately excluded. Every seam is a mocked async function that resolves after
 | Publishing an ad | `handlePublish()` in `ads/post-ad-screen.tsx` |
 | Order persistence | `trade/open-orders-store.ts` — swap the localStorage layer |
 | Ad persistence | `ads/ads-store.ts` — same |
-| Trader record | `profile/mock-profile.ts` — derived from settled escrows in a real build |
+| ~~Trader record~~ | **Real** — computed from the trader's own trades by the `trader_stats` view; the fixture file is gone |
 | Nickname | `setNickname()` in `profile/profile-store.ts` |
 | Identity verification | `startVerification()` in `profile/verification-dialog.tsx`; statuses in `profile/verification.ts` |
 | Stellar SDK, Horizon, XDR signing | None — the UI never touches these |

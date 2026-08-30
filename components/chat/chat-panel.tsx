@@ -144,7 +144,7 @@ function Bubble({
 }
 
 export interface ChatPanelProps {
-  counterparty: { address: string; nickname: string };
+  counterparty: { address: string; nickname: string; avatarUrl?: string | null };
   messages: TradeMessage[];
   onSend: (text: string) => void;
   /** Omitted where attachments are not wired up; the affordances hide. */
@@ -249,7 +249,11 @@ export function ChatPanel({
       {/* Header */}
       <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
         <div className="relative shrink-0">
-          <WalletBadge address={counterparty.address} size="sm" />
+          <WalletBadge
+            address={counterparty.address}
+            size="sm"
+            src={counterparty.avatarUrl}
+          />
           <span
             aria-hidden
             className="absolute -end-0.5 -bottom-0.5 size-2.5 rounded-full bg-primary ring-2 ring-card"

@@ -49,6 +49,16 @@ The UI says plainly that a screenshot is not proof of payment. It is the
 easiest thing in the conversation to fake, and the seller still has to see the
 money in their own account.
 
+**Profile pictures are real.** A trader can set, replace or remove one; it is
+cropped square and re-encoded in the browser first, which also strips EXIF. It
+follows them onto the order book, the trade screen and the chat header. The
+bytes live in a private bucket and are served, like attachments, through a
+route that re-checks the session — visible to traders, not to the internet.
+
+**The trading record is real.** The profile's tiles are computed from the
+trader's own trades by the `trader_stats` view, on read. A trader with no
+history sees zeroes and a hint saying why — there are no fixtures left.
+
 **Identity and verification are real.** First sign-in creates the trader.
 Nicknames persist and can be edited. Verification state lives in
 `trader_verifications` — see §3 for what "real" means there.
@@ -65,6 +75,9 @@ Nicknames persist and can be edited. Verification state lives in
 | `/trades/[id]` | A live manual trade: steps, chat, counterparty |
 | `POST /api/auth/challenge`, `POST /api/auth/verify`, `GET`/`DELETE /api/auth/session` | Sign-in |
 | `GET`/`PATCH /api/traders/me` | Your trader record — nickname only |
+| `GET /api/traders/me/stats` | Your trading record, computed from your trades |
+| `POST`/`DELETE /api/traders/me/avatar` | Set, replace or remove your picture |
+| `GET /api/traders/[address]/avatar` | A trader's picture, for any signed-in caller |
 | `GET`/`POST /api/traders/me/verifications` | Request a check; only the server grants one |
 | `GET`/`POST /api/ads`, `GET /api/ads/mine`, `DELETE /api/ads/[id]` | Ads |
 | `GET`/`POST /api/trades` | Your trades; open one against an ad |
@@ -93,7 +106,6 @@ publishes an ad. `npm run db:reset` clears test data between runs.
 | **On-chain verification** | The buyer can check the hash themselves | Reading Horizon for the recorded `asset_tx_hash`. |
 | **Real verification checks** | No provider is wired up | Email round trip, SMS code, KYC vendor. A request reaches `pending` and stops. |
 | **Rating** | No model — reviews are thumbs up/down | A rating model, or keep omitting it rather than inventing a number. |
-| **Trader statistics on the profile** | `trader_stats` computes them | Point the profile screen at the view; it still reads fixtures. |
 | **Public trader profile** | — | `/traders/[address]` does not exist, though the profile's record tiles are already its shape. |
 
 ---
@@ -173,9 +185,8 @@ Collected so they are not rediscovered. Fuller notes live in
    see §7.
 2. **Resolve the currency question.** It is the one thing making the current
    book incoherent.
-3. **Point the profile at `trader_stats`** so the record stops being fixtures.
-4. **Move domain types to `lib/domain/`** before the import count grows again.
-5. **Then escrow**, once the service question is settled.
+3. **Move domain types to `lib/domain/`** before the import count grows again.
+4. **Then escrow**, once the service question is settled.
 
 ---
 

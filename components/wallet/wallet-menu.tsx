@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { WalletBadge } from "@/components/ui/wallet-badge";
-import { useNickname } from "@/components/profile/profile-store";
+import { useProfile } from "@/components/profile/profile-store";
 import { useWallet } from "@/components/wallet/wallet-provider";
 import { truncateAddress } from "@/lib/format";
 import { EXPECTED_NETWORK } from "@/lib/wallet";
@@ -27,7 +27,8 @@ import { cn } from "@/lib/utils";
  */
 export function WalletMenu() {
   const router = useRouter();
-  const nickname = useNickname();
+  const profile = useProfile();
+  const nickname = profile?.nickname ?? null;
   const {
     address: walletAddress,
     sessionAddress,
@@ -180,7 +181,12 @@ export function WalletMenu() {
             : "border-border hover:border-primary/40",
         )}
       >
-        <WalletBadge address={address} size="sm" className="size-7 text-[10px]" />
+        <WalletBadge
+          address={address}
+          size="sm"
+          src={profile?.avatarUrl}
+          className="size-7 text-[10px]"
+        />
         <span className="hidden font-mono text-xs sm:inline">
           {truncateAddress(address)}
         </span>
@@ -206,7 +212,12 @@ export function WalletMenu() {
           className="absolute end-0 top-full z-50 mt-2 w-64 rounded-2xl border border-border bg-popover p-1.5 shadow-xl"
         >
           <div className="flex items-center gap-2.5 px-2.5 py-2">
-            <WalletBadge address={address} size="sm" className="size-8" />
+            <WalletBadge
+              address={address}
+              size="sm"
+              src={profile?.avatarUrl}
+              className="size-8"
+            />
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="flex items-center gap-1.5 truncate text-sm font-semibold">
                 {nickname}

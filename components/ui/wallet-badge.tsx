@@ -1,9 +1,13 @@
+"use client";
+
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
 export interface WalletBadgeProps extends React.ComponentProps<"div"> {
   address: string;
   size?: "sm" | "md" | "lg" | "xl";
+  /** The trader's picture. Falls back to the derived badge when absent. */
+  src?: string | null;
 }
 
 const sizeClasses = {
@@ -35,27 +39,52 @@ function getInitials(address: string): string {
   return address.slice(0, 2).toUpperCase();
 }
 
-/** Deterministic avatar derived from the address — same wallet, same face. */
+/**
+ * A trader's face: their picture if they have set one, otherwise a badge
+ * derived from the address — same wallet, same colours, same letters.
+ *
+ * The fallback is not a placeholder to be replaced later. Most traders will
+ * never upload anything, and an address-derived badge is still recognisable
+ * between one trade and the next, which is the job.
+ */
 export function WalletBadge({
   address,
   size = "md",
+  src = null,
   className,
   ...props
 }: WalletBadgeProps) {
+  // A picture can be removed while a page still holds its URL. Falling back
+  // beats a broken-image icon where a face should be.
+  const [failed, setFailed] = React.useState(false);
+  const showImage = Boolean(src) && !failed;
+
   return (
     <div
       data-slot="wallet-badge"
       title={address}
       aria-hidden="true"
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full font-semibold",
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold",
         sizeClasses[size],
         badgeColors[hashAddress(address) % badgeColors.length],
         className,
       )}
       {...props}
     >
-      {getInitials(address)}
+      {showImage ? (
+        // The bytes come from our own session-checked route, which next/image
+        // cannot optimise.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src as string}
+          alt=""
+          onError={() => setFailed(true)}
+          className="size-full object-cover"
+        />
+      ) : (
+        getInitials(address)
+      )}
     </div>
   );
 }

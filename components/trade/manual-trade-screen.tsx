@@ -292,6 +292,7 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
                     <WalletBadge
                       address={counterparty.address}
                       size="sm"
+                      src={counterparty.avatarUrl}
                       className="size-6 text-[9px]"
                     />
                     <span className="flex flex-col items-end">

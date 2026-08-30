@@ -7,6 +7,8 @@ export interface OrderTrader {
   /** Stellar public key. Shown truncated and mono, copyable. */
   address: string;
   verified: boolean;
+  /** Null when they have not set a picture; the badge falls back. */
+  avatarUrl: string | null;
   /**
    * Null until there is a rating model. Reviews are thumbs up/down, not
    * stars, so there is nothing honest to put here yet — and a fabricated

@@ -2,49 +2,31 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSessionAddress } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { validateNickname } from "@/lib/nickname";
+import {
+  getTrader,
+  toProfile,
+  TRADER_COLUMNS,
+  type TraderRow,
+} from "@/lib/traders/profile";
 
 const UNAUTHENTICATED = { error: "Not authenticated." };
-
-const COLUMNS = "address, nickname, joined_at";
-
-interface TraderRow {
-  address: string;
-  nickname: string;
-  joined_at: string;
-}
-
-/**
- * A trader is only an address, a name, and a join date.
- *
- * Payment details are deliberately absent: they are agreed in the trade chat,
- * between the two people who need them, and never stored here.
- */
-function toProfile(row: TraderRow) {
-  return {
-    address: row.address,
-    nickname: row.nickname,
-    joinedAt: row.joined_at,
-  };
-}
 
 export async function GET() {
   const address = await getSessionAddress();
   if (!address) return NextResponse.json(UNAUTHENTICATED, { status: 401 });
 
-  const { data, error } = await supabaseAdmin()
-    .from("traders")
-    .select(COLUMNS)
-    .eq("address", address)
-    .single();
-
-  if (error || !data) {
+  try {
+    const profile = await getTrader(address);
+    if (!profile) {
+      return NextResponse.json({ error: "Trader not found." }, { status: 404 });
+    }
+    return NextResponse.json(profile, {
+      headers: { "cache-control": "no-store" },
+    });
+  } catch (error) {
     console.error("traders/me GET failed", error);
     return NextResponse.json({ error: "Trader not found." }, { status: 404 });
   }
-
-  return NextResponse.json(toProfile(data as unknown as TraderRow), {
-    headers: { "cache-control": "no-store" },
-  });
 }
 
 /**
@@ -78,7 +60,7 @@ export async function PATCH(request: NextRequest) {
     .from("traders")
     .update({ nickname: trimmed })
     .eq("address", address)
-    .select(COLUMNS)
+    .select(TRADER_COLUMNS)
     .single();
 
   if (error || !data) {

@@ -60,35 +60,49 @@ const TABLES = [
   "auth_challenges",
 ];
 
-/** Receipt images from trade chat. */
-const BUCKET = "trade-attachments";
+/** Receipt images from trade chat, and profile pictures. */
+const ATTACHMENTS = "trade-attachments";
+const AVATARS = "trader-avatars";
 
-/** Everything in the attachments bucket, as full object paths. */
-async function attachmentPaths() {
+/**
+ * Objects in a bucket, as full paths, optionally skipping whole folders.
+ *
+ * Both buckets store one folder per owner — a trade id for attachments, an
+ * address for avatars — which is what makes --keep possible below.
+ */
+async function objectPaths(bucket, skipFolders = []) {
   const { data: entries, error } = await supabase.storage
-    .from(BUCKET)
+    .from(bucket)
     .list("", { limit: 1000 });
-  if (error) throw new Error(`attachments: ${error.message}`);
+  if (error) throw new Error(`${bucket}: ${error.message}`);
 
   const paths = [];
   for (const entry of entries ?? []) {
-    // Objects are stored under a folder per trade. Folders are synthesised
-    // from the object names and come back with a null id.
+    // Folders are synthesised from object names and come back with a null id.
     if (entry.id !== null) {
       paths.push(entry.name);
       continue;
     }
+    if (skipFolders.includes(entry.name)) continue;
+
     const { data: objects, error: nested } = await supabase.storage
-      .from(BUCKET)
+      .from(bucket)
       .list(entry.name, { limit: 1000 });
-    if (nested) throw new Error(`attachments: ${nested.message}`);
+    if (nested) throw new Error(`${bucket}: ${nested.message}`);
     for (const object of objects ?? []) paths.push(`${entry.name}/${object.name}`);
   }
   return paths;
 }
 
-/** What the report lists — the tables, plus the bucket that shadows them. */
-const ROWS = [...TABLES, "attachments"];
+/** Removes objects a bucket sweep selected, if there are any. */
+async function removeObjects(bucket, paths) {
+  if (!paths.length) return;
+  const { error } = await supabase.storage.from(bucket).remove(paths);
+  if (error) throw new Error(`${bucket}: ${error.message}`);
+}
+
+/** What the report lists — the tables, plus the buckets that shadow them. */
+const ROWS = [...TABLES, "attachments", "avatars"];
 
 async function counts() {
   const entries = await Promise.all(
@@ -100,14 +114,20 @@ async function counts() {
     }),
   );
 
-  let attachments;
-  try {
-    attachments = (await attachmentPaths()).length;
-  } catch {
-    attachments = "?";
-  }
+  const objects = async (bucket, skip) => {
+    try {
+      return (await objectPaths(bucket, skip)).length;
+    } catch {
+      return "?";
+    }
+  };
 
-  return { ...Object.fromEntries(entries), attachments };
+  return {
+    ...Object.fromEntries(entries),
+    attachments: await objects(ATTACHMENTS),
+    // Kept traders keep their pictures, the same as they keep their ads.
+    avatars: await objects(AVATARS, everything ? keep : undefined),
+  };
 }
 
 function report(label, before, after) {
@@ -156,11 +176,7 @@ async function main() {
   // messages with it but leaves the images those messages pointed at, in a
   // private bucket where nothing will ever name them again — the same shape of
   // problem as the reservation above, and just as invisible.
-  const paths = await attachmentPaths();
-  if (paths.length) {
-    const { error } = await supabase.storage.from(BUCKET).remove(paths);
-    if (error) throw new Error(`attachments: ${error.message}`);
-  }
+  await removeObjects(ATTACHMENTS, await objectPaths(ATTACHMENTS));
 
   if (everything) {
     const adsQuery = supabase.from("ads").delete();
@@ -170,6 +186,10 @@ async function main() {
         ? adsQuery.not("advertiser", "in", `(${keep.join(",")})`)
         : adsQuery.not("id", "is", null),
     );
+
+    // Pictures go with the traders that own them, and only then: a kept
+    // trader keeps their face, the same as they keep their ads.
+    await removeObjects(AVATARS, await objectPaths(AVATARS, keep));
 
     // trader_verifications cascades from traders.
     const tradersQuery = supabase.from("traders").delete();

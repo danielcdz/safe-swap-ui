@@ -34,6 +34,20 @@ export function formatPrice(value: number) {
   return priceFormatter.format(value);
 }
 
+const joinedFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/**
+ * August 2026 — pinned to UTC so the server and the client agree. A join date
+ * formatted in the viewer's zone would be a hydration mismatch.
+ */
+export function joinedLabel(isoDate: string) {
+  return joinedFormatter.format(new Date(isoDate));
+}
+
 /** GDRX…UJUJ — 4 head, 4 tail, per the brand's address convention. */
 export function truncateAddress(address: string, head = 4, tail = 4) {
   if (address.length <= head + tail + 1) return address;

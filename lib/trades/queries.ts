@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomInt } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { avatarUrl } from "@/lib/avatar-url";
 import { postSystemMessage } from "./messages";
 import { bookModeFor, type AdSide } from "@/components/ads/types";
 import {
@@ -19,6 +20,8 @@ function newReference() {
 export interface TradeParticipant {
   address: string;
   nickname: string;
+  /** Null when they have not set a picture; the badge falls back. */
+  avatarUrl: string | null;
 }
 
 export interface TradeRecord {
@@ -109,14 +112,18 @@ export async function getTradeFor(
 
   const { data: people, error: peopleError } = await supabase
     .from("traders")
-    .select("address, nickname")
+    .select("address, nickname, avatar_path")
     .in("address", [row.maker, row.taker]);
 
   if (peopleError) {
     throw new Error(`Could not load participants: ${peopleError.message}`);
   }
 
-  type Person = { address: string; nickname: string };
+  type Person = {
+    address: string;
+    nickname: string;
+    avatar_path: string | null;
+  };
   const byAddress = new Map((people as Person[]).map((p) => [p.address, p]));
   const sellerRow = byAddress.get(sellerAddress);
   const buyerRow = byAddress.get(buyerAddress);
@@ -137,10 +144,12 @@ export async function getTradeFor(
     buyer: {
       address: buyerAddress,
       nickname: buyerRow?.nickname ?? "Unknown",
+      avatarUrl: avatarUrl(buyerAddress, buyerRow?.avatar_path ?? null),
     },
     seller: {
       address: sellerAddress,
       nickname: sellerRow?.nickname ?? "Unknown",
+      avatarUrl: avatarUrl(sellerAddress, sellerRow?.avatar_path ?? null),
     },
     assetTxHash: row.asset_tx_hash,
     createdAt: row.created_at,
@@ -196,18 +205,21 @@ export async function listTradesFor(viewer: string): Promise<TradeSummary[]> {
   const others = rows.map((row) => (row.maker === viewer ? row.taker : row.maker));
   const { data: people, error: peopleError } = await supabase
     .from("traders")
-    .select("address, nickname")
+    .select("address, nickname, avatar_path")
     .in("address", [...new Set(others)]);
 
   if (peopleError) {
     throw new Error(`Could not load participants: ${peopleError.message}`);
   }
 
-  const nicknames = new Map(
-    (people as { address: string; nickname: string }[]).map((p) => [
-      p.address,
-      p.nickname,
-    ]),
+  const counterparties = new Map(
+    (
+      people as {
+        address: string;
+        nickname: string;
+        avatar_path: string | null;
+      }[]
+    ).map((p) => [p.address, p]),
   );
 
   return rows.map((row) => {
@@ -219,7 +231,11 @@ export async function listTradesFor(viewer: string): Promise<TradeSummary[]> {
       status: row.status,
       settlement: row.settlement,
       role: roleFor(one(row.ads).side, isMaker),
-      counterparty: { address: other, nickname: nicknames.get(other) ?? "Unknown" },
+      counterparty: {
+        address: other,
+        nickname: counterparties.get(other)?.nickname ?? "Unknown",
+        avatarUrl: avatarUrl(other, counterparties.get(other)?.avatar_path ?? null),
+      },
       price: Number(row.price),
       fiatAmount: Number(row.fiat_amount),
       assetAmount: Number(row.asset_amount),

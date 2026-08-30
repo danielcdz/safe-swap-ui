@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { inspectImage } from "./image";
+import { inspectImage } from "@/lib/image/inspect";
 import {
   MESSAGE_COLUMNS,
   toMessage,
