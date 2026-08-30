@@ -75,9 +75,9 @@ export function VerificationDialog({
       ) : null}
 
       <p className="mb-3 text-xs text-muted-foreground">
-        Checks are recorded but not yet carried out — email, SMS, and document
-        review arrive with their providers. Requested steps stay pending until
-        then.
+        Your wallet is already proven — signing in is the proof. The rest
+        arrive with their providers in a later release; nothing here can grant
+        a badge before then.
       </p>
 
       <ul className="flex flex-col gap-2">
@@ -110,6 +110,11 @@ export function VerificationDialog({
                       Badge
                     </span>
                   ) : null}
+                  {method.soon ? (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Soon
+                    </span>
+                  ) : null}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {method.description}
@@ -130,11 +135,18 @@ export function VerificationDialog({
                 <Button
                   size="sm"
                   className="shrink-0"
-                  disabled={!method.requestable || busy !== null}
+                  // Nothing on the other side of the request yet. A working
+                  // button here would put the trader in `pending` for a check
+                  // nobody is going to carry out.
+                  disabled={!method.requestable || method.soon || busy !== null}
                   aria-busy={busy === method.id}
                   onClick={() => startVerification(method.id)}
                 >
-                  {busy === method.id ? "Requesting…" : "Verify"}
+                  {method.soon
+                    ? "Soon"
+                    : busy === method.id
+                      ? "Requesting…"
+                      : "Verify"}
                 </Button>
               )}
             </li>

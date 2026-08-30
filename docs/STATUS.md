@@ -104,7 +104,7 @@ publishes an ad. `npm run db:reset` clears test data between runs.
 | **Escrow** | Deferred for a fast MVP, not abandoned | Trustless Work calls, XDR signing, Horizon. `components/trade/trade-screen.tsx` keeps the assembled composition — marked `SUPERSEDED`, unrouted, **do not delete**. |
 | **Stored payment details** | Never storing them is the protection | Nothing. Traders exchange SINPE numbers and account numbers in the trade chat. The columns existed briefly and were dropped in `20260816234721`. |
 | **On-chain verification** | The buyer can check the hash themselves | Reading Horizon for the recorded `asset_tx_hash`. |
-| **Real verification checks** | No provider is wired up | Email round trip, SMS code, KYC vendor. A request reaches `pending` and stops. |
+| **Real verification checks** | No provider is wired up | Email round trip, SMS code, KYC vendor. The dialog marks all three **Soon** and disables them — the request API and its `pending` state still work, so clearing `soon` in `VERIFICATION_METHODS` is what turns each one on. |
 | **Rating** | No model — reviews are thumbs up/down | A rating model, or keep omitting it rather than inventing a number. |
 | **Public trader profile** | — | `/traders/[address]` does not exist, though the profile's record tiles are already its shape. |
 
