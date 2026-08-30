@@ -18,11 +18,12 @@ fix the document.
 | Project ref | `wxgwzrlkdajxtplnixfd` |
 | API URL | `https://wxgwzrlkdajxtplnixfd.supabase.co` |
 | Postgres | 17.6 |
-| Applied | 2026-08-17 |
+| Applied | 2026-08-30 |
 | Tables | 7, all with RLS enabled |
 | Views | `trader_stats`, `order_book` — both `security_invoker` |
+| Storage | two buckets, `trade-attachments` and `trader-avatars` — private, no policies |
 | Seed data | **none, deliberately** — the book is empty until someone publishes |
-| App wiring | ads, order book, identity, verification, manual trades and chat are all live. Escrow is not. |
+| App wiring | ads, order book, identity, verification, manual trades and chat — with image attachments — are all live. Escrow is not. |
 
 Migrations, matching `supabase/migrations/` by filename:
 
@@ -39,6 +40,10 @@ Migrations, matching `supabase/migrations/` by filename:
 | `20260816222730` | `reserve_inventory_separately` |
 | `20260816234721` | `drop_trader_payment_details` |
 | `20260817000912` | `views_respect_caller_rls` |
+| `20260830152147` | `message_image_kind` |
+| `20260830152201` | `trade_message_attachments` |
+| `20260830171301` | `trader_stats_count_manual_trades` |
+| `20260830172035` | `trader_avatars` |
 
 > **Filenames must match applied versions.** They diverged once already,
 > because the repo files were written before the migrations were applied and
@@ -77,17 +82,25 @@ trader_stats (view) = traders ⋈ trades ⋈ trade_reviews
 
 | Table | Cols | CHECKs | FKs | Holds |
 |---|---|---|---|---|
-| `traders` | 5 | 2 | 0 | Identity only — address, nickname, joined_at. **No payment details**, see §3. |
+| `traders` | 7 | 4 | 0 | Identity only — address, nickname, joined_at, picture. **No payment details**, see §3. |
 | `trader_verifications` | 5 | 0 | 1 | One row per trader per method |
 | `ads` | 16 | 8 | 1 | Standing terms that fill the order book |
 | `trades` | 16+ | 5 | 3 | A specific agreement, moving through manual settlement or escrow |
-| `trade_messages` | 6 | 2 | 2 | Chat, with escrow events in the same stream |
+| `trade_messages` | 11 | 5 | 2 | Chat, with escrow events and receipt images in the same stream |
 | `trade_reviews` | 6 | 1 | 3 | One review per counterparty per trade |
 
 `trader_stats` is a **view**, not columns: total trades, completion rate,
-average release minutes, positive feedback, and 30-day volume, all computed
-from trades on read. Cached columns drift from the trades that produced them;
-a view cannot. Swap for a materialized view if the read cost ever shows up.
+average release minutes, positive feedback, 30-day and all-time volume, and
+the review count, all computed from trades on read. Cached columns drift from
+the trades that produced them; a view cannot. Swap for a materialized view if
+the read cost ever shows up.
+
+It counts **both terminal vocabularies** — `released` for escrow and
+`completed` for manual settlement. Counting only `released`, as it did until
+`20260830171301`, made it report zero for every trade the app actually
+produces. The rates come back null rather than zero when their denominator is
+empty, because a trader with nothing closed has no completion rate, and that
+is not the same fact as a rate of nought.
 
 ### Enums
 
@@ -97,7 +110,7 @@ a view cannot. Swap for a materialized view if the read cost ever shows up.
 | `ad_status` | `active`, `paused`, `closed` |
 | `price_type` | `fixed`, `floating` |
 | `escrow_status` | `pending`, `funded`, `disputed`, `released`, `cancelled`, plus the manual states `open`, `fiat_sent`, `fiat_confirmed`, `asset_sent`, `completed` |
-| `message_kind` | `text`, `system` |
+| `message_kind` | `text`, `system`, `image` |
 | `verify_method` | `wallet`, `email`, `phone`, `id` |
 | `verify_status` | `unverified`, `pending`, `verified` |
 
@@ -138,6 +151,25 @@ exactly what a scraper wants, has to be defended on every endpoint forever,
 and can be handed to the wrong counterparty by any future bug. Held only in a
 trade's messages, the same detail is disclosed by the person it belongs to, to
 one counterparty, scoped to one trade. Do not reintroduce the columns.
+
+### An attachment is a message, and its bytes are not in Postgres
+
+`message_kind` gained `image` rather than a `trade_attachments` table. The chat
+is one ordered stream and a receipt belongs in it, next to the sentence that
+explains it — a second table would have to be merged back into that order on
+every read.
+
+The row carries the mime, byte count and dimensions; the bytes live in the
+`trade-attachments` bucket under `{trade_id}/{uuid}`. Dimensions are stored
+because the bubble has to reserve its space before the image loads, and the
+five columns are all-or-nothing (`messages_attachment_matches_kind`) — a
+half-populated row renders as a broken bubble with nothing left to say whether
+the object was ever uploaded.
+
+The mime is the one read out of the bytes by `lib/trades/image.ts`, not the one
+the upload declared. A `.png` extension on a text file is one `mv` away, and
+SVG stays out by never matching an image signature rather than by being named
+in a deny-list.
 
 ### Inventory is reserved separately from the total
 
@@ -183,6 +215,24 @@ quietly working.
 
 The advisor therefore reports **seven `rls_enabled_no_policy` INFO lints, and
 they are expected.** Do not "fix" them by dropping RLS.
+
+**Storage follows the same rule.** Both buckets are private and
+`storage.objects` has RLS enabled with no policies, so the secret key is the
+only way to an object and the app decides who may have one. The browser is
+never handed a storage URL: bytes come back through
+`/api/trades/[id]/messages/[messageId]/image` and
+`/api/traders/[address]/avatar`, which re-check the session. A signed URL would
+have been less code and wrong — it goes on working for whoever holds it long
+after the check that produced it is over. Each bucket also carries its own
+`file_size_limit` and `allowed_mime_types`, behind the handlers' validation
+rather than instead of it.
+
+The two differ in *who* may read. An attachment is for the trade's two
+participants and nobody else. A picture is for any signed-in trader, because a
+face is only worth having if the counterparty can see it — but deliberately not
+for the public, which a public bucket would have made it: a permanent, guessable
+URL keyed by wallet address is a face tied to a wallet by anyone who cares to
+look.
 
 **Views must be `security_invoker`.** A Postgres view defaults to
 `SECURITY DEFINER`, running as its creator and so bypassing the deny-all on
@@ -231,12 +281,14 @@ schema. That was the only WARN and it is cleared.
 - **Seed data — deliberately none.** The book is empty until someone publishes
   an ad. Do not add fixtures to make screens look populated;
   `npm run db:reset` is there to get back to empty.
-- **Trader statistics.** `trader_stats` computes them; the profile screen still
-  reads fixtures from `components/profile/mock-profile.ts`.
 - **No payment-methods table** — they are a `text[]` on `ads`, GIN-indexed for
   filtering. Promote to a table if they need metadata.
-- **No auth, storage, or Realtime.** Realtime is the plausible next one, for
-  chat and escrow status; note it would need the JWT approach in §4.
+- **No auth or Realtime.** Realtime is the plausible next one, for chat and
+  escrow status; note it would need the JWT approach in §4.
+- **No retention policy on attachments.** A receipt lives as long as its
+  message does. Purging them some days after a trade settles would be the
+  stronger privacy posture, but it needs a scheduled job this project does not
+  have yet.
 - **Escrow/chain state.** `trades.escrow_contract_id` is the only slot for it.
   Trustless Work calls, XDR signing and Horizon polling are long-running and
   do not belong in a route handler — that is a separate service decision.
@@ -245,9 +297,8 @@ schema. That was the only WARN and it is cleared.
 
 ## 7. Suggested order of work
 
-1. Point the profile at `trader_stats` so the record stops being fixtures.
-2. Move domain types from `components/*/types.ts` to `lib/domain/` so route
+1. Move domain types from `components/*/types.ts` to `lib/domain/` so route
    handlers can import them without reaching into UI folders.
-3. Settle where escrow runs — `trades.escrow_contract_id` is the only slot for
+2. Settle where escrow runs — `trades.escrow_contract_id` is the only slot for
    it, and a route handler is a poor fit for long-running chain work.
-4. Regenerate TypeScript types after every migration.
+3. Regenerate TypeScript types after every migration.

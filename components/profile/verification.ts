@@ -14,6 +14,15 @@ export interface VerificationMethod {
   grantsBadge?: boolean;
   /** Whether a trader can ask for it themselves. */
   requestable?: boolean;
+  /**
+   * No provider is wired up yet, so the check cannot actually be carried out.
+   *
+   * Distinct from `requestable`, which says whether asking makes sense at all:
+   * wallet ownership is proven by signing in and will never be requested,
+   * while these three are simply not built yet. Clearing the flag is what
+   * turns each one on.
+   */
+  soon?: boolean;
 }
 
 export const VERIFICATION_METHODS: VerificationMethod[] = [
@@ -27,12 +36,14 @@ export const VERIFICATION_METHODS: VerificationMethod[] = [
     label: "Email address",
     description: "Where trade and dispute notifications go.",
     requestable: true,
+    soon: true,
   },
   {
     id: "phone",
     label: "Phone number",
     description: "SMS alerts while a trade is live.",
     requestable: true,
+    soon: true,
   },
   {
     id: "id",
@@ -40,6 +51,7 @@ export const VERIFICATION_METHODS: VerificationMethod[] = [
     description: "Raises your order limits and earns the Verified mark.",
     grantsBadge: true,
     requestable: true,
+    soon: true,
   },
 ];
 

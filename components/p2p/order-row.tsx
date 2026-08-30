@@ -62,7 +62,11 @@ export function OrderRow({ order, open, onToggle }: OrderRowProps) {
         {/* Advertiser — the trust block. Identity, track record, on-chain address. */}
         <div className="flex min-w-0 items-start gap-3">
           <div className="relative shrink-0">
-            <WalletBadge address={trader.address} size="lg" />
+            <WalletBadge
+              address={trader.address}
+              size="lg"
+              src={trader.avatarUrl}
+            />
             <span
               aria-hidden
               className="absolute -end-0.5 -bottom-0.5 size-3 rounded-full bg-primary ring-2 ring-card"

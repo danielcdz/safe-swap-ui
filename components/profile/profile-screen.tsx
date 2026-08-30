@@ -3,11 +3,11 @@
 import * as React from "react";
 import {
   BadgeCheck,
+  Camera,
   Check,
   Copy,
   Pencil,
   ShieldCheck,
-  Star,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,17 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { WalletBadge } from "@/components/ui/wallet-badge";
 import { MARKET } from "@/components/p2p/types";
-import { formatAsset, truncateAddress } from "@/lib/format";
+import { formatAsset, joinedLabel, truncateAddress } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useWallet } from "@/components/wallet/wallet-provider";
-import { joinedLabel, PROFILE } from "./mock-profile";
-import { updateNickname, useProfile } from "./profile-store";
+import {
+  removeAvatar,
+  updateAvatar,
+  updateNickname,
+  useProfile,
+} from "./profile-store";
+import { AvatarDialog } from "./avatar-dialog";
+import { useTraderStats } from "./stats-store";
 import { validateNickname } from "@/lib/nickname";
 import { VerificationDialog } from "./verification-dialog";
 import {
@@ -67,10 +73,12 @@ function Metric({
 
 export function ProfileScreen() {
   const profile = useProfile();
+  const stats = useTraderStats();
   const { address } = useWallet();
   const statuses = useVerification();
   const verified = isVerified(statuses);
   const [verifyOpen, setVerifyOpen] = React.useState(false);
+  const [avatarOpen, setAvatarOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState("");
@@ -138,10 +146,25 @@ export function ProfileScreen() {
       {/* Identity */}
       <section className="flex flex-col items-start gap-5 rounded-2xl border border-border bg-card p-6 shadow-sm sm:flex-row sm:items-center">
         <div className="relative shrink-0">
-          <WalletBadge address={address} size="xl" />
+          <button
+            type="button"
+            onClick={() => setAvatarOpen(true)}
+            disabled={!profile}
+            aria-label="Change your profile picture"
+            className="group relative block cursor-pointer rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline-hidden disabled:pointer-events-none"
+          >
+            <WalletBadge
+              address={address}
+              size="xl"
+              src={profile?.avatarUrl}
+            />
+            <span className="absolute inset-0 grid place-items-center rounded-full bg-ink/55 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+              <Camera aria-hidden className="size-6 text-white" />
+            </span>
+          </button>
           <span
             aria-hidden
-            className="absolute -end-1 -bottom-1 size-5 rounded-full bg-primary ring-4 ring-card"
+            className="pointer-events-none absolute -end-1 -bottom-1 size-5 rounded-full bg-primary ring-4 ring-card"
           />
         </div>
 
@@ -271,49 +294,75 @@ export function ProfileScreen() {
         </Button>
       </section>
 
-      {/* Record */}
+      {/* Record — every figure is computed from this trader's own trades by
+          the `trader_stats` view, on read. Someone who has never traded sees
+          zeroes, with the hint saying why: a bare 0% completion would read as
+          having failed everything rather than as having done nothing.
+
+          There is no Rating tile. Reviews are thumbs up/down, so there is no
+          rating to compute, and deriving stars from the feedback percentage
+          would be inventing a number. Positive feedback is the real measure. */}
       <h2 className="mt-8 mb-3 text-sm font-semibold">Trading record</h2>
       <section
         aria-label="Trading record"
         className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3"
       >
         <Metric
-          label="Rating"
-          value={PROFILE.rating.toFixed(2)}
-          icon={
-            <Star aria-hidden className="size-5 fill-current text-primary" />
-          }
-          hint={`${PROFILE.positiveFeedback}% positive feedback`}
-        />
-        <Metric
           label="Trades"
-          value={String(PROFILE.totalTrades)}
+          value={String(stats.totalTrades)}
           hint="Completed all-time"
         />
         <Metric
           label="Completion"
-          value={PROFILE.completionRate.toFixed(1)}
+          value={(stats.completionRate ?? 0).toFixed(1)}
           unit="%"
-          hint="Orders taken that settled"
+          hint={
+            stats.completionRate === null
+              ? "No closed trades yet"
+              : "Orders taken that settled"
+          }
         />
         <Metric
           label="Avg. release"
-          value={String(PROFILE.avgReleaseMinutes)}
+          value={String(stats.avgReleaseMinutes ?? 0)}
           unit="min"
-          hint="From payment to release"
+          hint={
+            stats.avgReleaseMinutes === null
+              ? "No completed trades yet"
+              : "From payment to release"
+          }
         />
         <Metric
           label="30-day volume"
-          value={formatAsset(PROFILE.volume30d)}
+          value={formatAsset(stats.volume30d)}
+          unit={MARKET.asset}
+        />
+        <Metric
+          label="All-time volume"
+          value={formatAsset(stats.volumeAllTime)}
           unit={MARKET.asset}
         />
         <Metric
           label="Positive feedback"
-          value={PROFILE.positiveFeedback.toFixed(1)}
+          value={(stats.positiveFeedback ?? 0).toFixed(1)}
           unit="%"
-          hint="Across all counterparties"
+          hint={
+            stats.reviewCount === 0
+              ? "No reviews yet"
+              : `Across ${stats.reviewCount} review${stats.reviewCount === 1 ? "" : "s"}`
+          }
         />
       </section>
+
+      {avatarOpen ? (
+        <AvatarDialog
+          address={address}
+          currentUrl={profile?.avatarUrl ?? null}
+          onSave={updateAvatar}
+          onRemove={removeAvatar}
+          onDismiss={() => setAvatarOpen(false)}
+        />
+      ) : null}
 
       <VerificationDialog
         open={verifyOpen}

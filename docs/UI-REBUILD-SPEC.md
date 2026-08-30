@@ -6,7 +6,7 @@ This started as a plan for rebuilding the SafeSwap interface from an earlier cod
 
 **Scope:** UI only. Wallet connectors, escrow/blockchain calls, API routes, and database wiring are deliberately excluded — see [Out of scope](#9-out-of-scope) for the seams left open.
 
-For where the build actually stands, start at [`STATUS.md`](./STATUS.md). Ads, the order book and identity are served from Supabase ([`SUPABASE-SCHEMA.md`](./SUPABASE-SCHEMA.md)); sign-in is real ([`WALLET-AUTH.md`](./WALLET-AUTH.md)). Trades, chat and escrow are still mocked.
+For where the build actually stands, start at [`STATUS.md`](./STATUS.md). Ads, the order book and identity are served from Supabase ([`SUPABASE-SCHEMA.md`](./SUPABASE-SCHEMA.md)); sign-in is real ([`WALLET-AUTH.md`](./WALLET-AUTH.md)). Trades and chat are real too, including image attachments; escrow is still deferred.
 
 ---
 
@@ -291,7 +291,7 @@ All paths under `components/`.
 |---|---|
 | **Button** (`ui/button.tsx`) | `cva`-based. Variants `primary` \| `sell` \| `ghost` \| `danger`; sizes `sm` \| `md` \| `lg` \| `icon`. Takes **`children`**, so it wraps icons. All variants use semantic tokens. Base keeps `rounded-full`, `active:scale-97`, and a focus ring. |
 | **TabBar** (`ui/tab-bar.tsx`) | Pill segmented control. Track `bg-primary/5 rounded-full p-1`. Props `size` (`sm` for section headers, `md` standalone) and `activeTone` (`primary` \| `destructive`) so a buy/sell switch carries its side colour. Full roving tabindex — arrows, Home, End — with `role="tablist"`/`role="tab"`. |
-| **WalletBadge** (`ui/wallet-badge.tsx`) | Deterministic avatar. Hashes the **address** — not the handle, so identity survives a rename — to pick one of four token-based colour pairs, and derives 2-letter initials. Sizes `sm` \| `md` \| `lg`. |
+| **WalletBadge** (`ui/wallet-badge.tsx`) | A trader's face. Renders their picture when `src` is given, and otherwise a deterministic badge: hashes the **address** — not the handle, so identity survives a rename — to pick one of four token-based colour pairs, and derives 2-letter initials. The badge is the permanent fallback, not a placeholder; it also catches a picture that has been removed since the page loaded. Sizes `sm` \| `md` \| `lg` \| `xl`. |
 | **InfoTip** (`ui/info-tip.tsx`) | `(i)` affordance. Opens on hover, focus, **and tap** — pointer-only tooltips are unreachable by keyboard and invisible on touch. `role="tooltip"` + `aria-describedby`; Escape and blur dismiss. Resets inherited uppercase/tracking. |
 | **Dialog** (`ui/dialog.tsx`) | Modal shell — backdrop, Escape, focus in on open and back to the opener on close, body scroll lock, optional `initialFocusRef` and footer. Every modal builds on this; do not re-implement the mechanics. |
 | **ConfirmDialog** (`ui/confirm-dialog.tsx`) | `Dialog` plus a confirm/dismiss footer, for irreversible actions. Focus lands on the confirm button. |
@@ -424,9 +424,11 @@ Header (counterparty avatar with live dot, handle, address, trade count), a dism
 - Outgoing bubbles: `bg-chat-bubble-outgoing`, bottom-right corner tightened, delivery ticks (single = sent, double = delivered/read, primary when read).
 - Incoming: `bg-muted`, bottom-left tightened.
 - **System messages** are centred pills — escrow events land in the same stream as the conversation, which is the point.
+- **Image bubbles** carry the transfer screenshot the fiat leg turns on. Thin frame instead of the text padding, caption below when there is one, click to open a lightbox. The `width`/`height` attributes come from the stored dimensions, so the conversation does not jump as images load.
+- **Attaching**: paperclip in the composer, drag-and-drop onto the panel, and paste — paste is the one that matters, since a desktop screenshot is pasted rather than saved and picked. A pending upload previews *above* the composer, not as a bubble in the list: the list only ever renders what the server returned, which is what stops a message appearing twice when the next poll lands.
 - `role="log" aria-live="polite"`, auto-scrolled on new messages.
 
-The safety notice carries the one thing that actually loses people money: *never release USDC until the payment has cleared in your own account.*
+The safety notice carries the one thing that actually loses people money: *never release USDC until the payment has cleared in your own account.* Attachments make that line matter more, not less — a screenshot is the easiest thing in the conversation to fake, and the notice says so.
 
 ### Wallet — `wallet/wallet-menu.tsx`
 
@@ -550,7 +552,7 @@ Deliberately excluded. Every seam is a mocked async function that resolves after
 | Publishing an ad | `handlePublish()` in `ads/post-ad-screen.tsx` |
 | Order persistence | `trade/open-orders-store.ts` — swap the localStorage layer |
 | Ad persistence | `ads/ads-store.ts` — same |
-| Trader record | `profile/mock-profile.ts` — derived from settled escrows in a real build |
+| ~~Trader record~~ | **Real** — computed from the trader's own trades by the `trader_stats` view; the fixture file is gone |
 | Nickname | `setNickname()` in `profile/profile-store.ts` |
 | Identity verification | `startVerification()` in `profile/verification-dialog.tsx`; statuses in `profile/verification.ts` |
 | Stellar SDK, Horizon, XDR signing | None — the UI never touches these |

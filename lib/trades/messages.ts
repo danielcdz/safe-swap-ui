@@ -5,29 +5,65 @@ import { getTradeFor } from "./queries";
 
 export const MESSAGE_MAX = 2000;
 
+export type MessageKind = "text" | "system" | "image";
+
+/** What an image message carries beyond its caption. */
+export interface MessageAttachment {
+  mime: string;
+  bytes: number;
+  width: number;
+  height: number;
+}
+
 export interface TradeMessageRecord {
   id: string;
-  kind: "text" | "system";
+  kind: MessageKind;
   /** Null for system messages. */
   author: string | null;
   body: string;
   createdAt: string;
+  /** Present only on image messages. */
+  attachment?: MessageAttachment;
 }
 
-interface MessageRow {
+export interface MessageRow {
   id: string;
-  kind: "text" | "system";
+  kind: MessageKind;
   author: string | null;
   body: string;
   created_at: string;
+  attachment_mime: string | null;
+  attachment_bytes: number | null;
+  attachment_width: number | null;
+  attachment_height: number | null;
 }
 
-const toMessage = (row: MessageRow): TradeMessageRecord => ({
+/**
+ * The columns a message is read through.
+ *
+ * `attachment_path` is deliberately absent. The bytes are served back through
+ * a route of ours that re-checks the session; handing the client a storage
+ * location instead would be handing it something that outlives the check.
+ */
+export const MESSAGE_COLUMNS =
+  "id, kind, author, body, created_at, attachment_mime, attachment_bytes, attachment_width, attachment_height";
+
+export const toMessage = (row: MessageRow): TradeMessageRecord => ({
   id: row.id,
   kind: row.kind,
   author: row.author,
   body: row.body,
   createdAt: row.created_at,
+  ...(row.kind === "image" && row.attachment_mime !== null
+    ? {
+        attachment: {
+          mime: row.attachment_mime,
+          bytes: row.attachment_bytes ?? 0,
+          width: row.attachment_width ?? 0,
+          height: row.attachment_height ?? 0,
+        },
+      }
+    : {}),
 });
 
 /**
@@ -46,12 +82,12 @@ export async function listMessages(
 
   const { data, error } = await supabaseAdmin()
     .from("trade_messages")
-    .select("id, kind, author, body, created_at")
+    .select(MESSAGE_COLUMNS)
     .eq("trade_id", tradeId)
     .order("created_at", { ascending: true });
 
   if (error) throw new Error(`Could not load messages: ${error.message}`);
-  return (data as MessageRow[]).map(toMessage);
+  return (data as unknown as MessageRow[]).map(toMessage);
 }
 
 export async function postMessage(
@@ -65,11 +101,11 @@ export async function postMessage(
   const { data, error } = await supabaseAdmin()
     .from("trade_messages")
     .insert({ trade_id: tradeId, kind: "text", author, body })
-    .select("id, kind, author, body, created_at")
+    .select(MESSAGE_COLUMNS)
     .single();
 
   if (error) throw new Error(`Could not send: ${error.message}`);
-  return toMessage(data as MessageRow);
+  return toMessage(data as unknown as MessageRow);
 }
 
 /**

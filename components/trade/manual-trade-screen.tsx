@@ -27,6 +27,7 @@ import { useTradeMessages } from "./use-trade-messages";
 import { invalidateTrades } from "./trades-store";
 import { EscrowStatusBadge } from "./escrow-status-badge";
 import { EscrowStepper } from "./escrow-stepper";
+import { PaymentProofDialog } from "./payment-proof-dialog";
 import { MANUAL_STEPS, stageOf, type TradeRole } from "./types";
 
 /** How often the screen re-reads the trade, so each side sees the other move. */
@@ -116,9 +117,9 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [txHash, setTxHash] = React.useState("");
-  const [confirming, setConfirming] = React.useState<"cancel" | "dispute" | null>(
-    null,
-  );
+  const [confirming, setConfirming] = React.useState<
+    "cancel" | "dispute" | "payment" | null
+  >(null);
 
   const finished = TERMINAL.has(trade.status);
   const stage = stageOf(trade.status);
@@ -183,6 +184,19 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
   }
 
   const chat = useTradeMessages(trade.id, trade.viewer);
+
+  /**
+   * The buyer confirming the fiat leg, with an optional receipt.
+   *
+   * The image goes first, and a failed upload stops the trade moving. The
+   * dialog keeps the file so they can retry or go on without it — advancing
+   * anyway would leave the seller waiting on a receipt that never arrives,
+   * with nothing on either screen to say why.
+   */
+  async function confirmPayment(file: File | null) {
+    if (file && !(await chat.sendImage(file))) return;
+    await act("next");
+  }
 
   return (
     <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-8 sm:px-6">
@@ -278,6 +292,7 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
                     <WalletBadge
                       address={counterparty.address}
                       size="sm"
+                      src={counterparty.avatarUrl}
                       className="size-6 text-[9px]"
                     />
                     <span className="flex flex-col items-end">
@@ -383,7 +398,16 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
               className="sm:min-w-56"
               disabled={!myTurn || pending}
               aria-busy={pending}
-              onClick={() => act("next")}
+              onClick={() => {
+                // Stage 0 is the buyer's, and the only step where a receipt is
+                // worth anything — so it gets a moment to attach one first.
+                if (stage !== 0) {
+                  void act("next");
+                  return;
+                }
+                chat.clearError();
+                setConfirming("payment");
+              }}
             >
               {pending ? (
                 <>
@@ -428,7 +452,9 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
           counterparty={counterparty}
           messages={chat.messages}
           onSend={chat.send}
+          onSendImage={chat.sendImage}
           sending={chat.sending}
+          uploading={chat.uploading}
           error={chat.error}
           className="h-[26rem] lg:sticky lg:top-20 lg:h-[min(36rem,calc(100dvh-8rem))]"
         />
@@ -443,6 +469,16 @@ export function ManualTradeScreen({ initial }: { initial: TradeRecord }) {
         onConfirm={() => act("cancel")}
         onDismiss={() => setConfirming(null)}
       />
+
+      {confirming === "payment" ? (
+        <PaymentProofDialog
+          counterpartyName={counterparty.nickname}
+          busy={pending || chat.uploading}
+          error={chat.error}
+          onConfirm={confirmPayment}
+          onDismiss={() => setConfirming(null)}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={confirming === "dispute"}

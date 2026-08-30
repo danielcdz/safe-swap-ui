@@ -12,7 +12,7 @@ document; the detailed files below stay authoritative for their own areas.
 | [`WALLET-AUTH.md`](./WALLET-AUTH.md) | Freighter connection and SEP-53 sign-in |
 | [`TRADES-PLAN.md`](./TRADES-PLAN.md) | Manual settlement design and build order |
 
-Last updated 2026-08-17, on `feat/manual-trades`.
+Last updated 2026-08-30, on `feat/chat-attachments`.
 
 ---
 
@@ -36,9 +36,28 @@ perform it. Cancelling is allowed only before anything has moved; past that
 the exit is a dispute. A stale `from` status loses the race rather than
 skipping a step.
 
-**Chat is real.** Messages live in `trade_messages`, poll on a 3s chained
-timeout, and are readable only by the trade's two participants. System events
-land in the same stream.
+**Chat is real, and carries images.** Messages live in `trade_messages`, poll
+on a 3s chained timeout, and are readable only by the trade's two participants.
+System events land in the same stream, and so do attachments: the buyer can
+paste, drop or pick a screenshot of the transfer, capped at 20 per trade. The
+bytes go to a private bucket and come back through a route that re-checks the
+session — never a signed URL, which would work for anyone holding it. The
+format and dimensions recorded are read out of the bytes rather than taken from
+the upload's declared type.
+
+The UI says plainly that a screenshot is not proof of payment. It is the
+easiest thing in the conversation to fake, and the seller still has to see the
+money in their own account.
+
+**Profile pictures are real.** A trader can set, replace or remove one; it is
+cropped square and re-encoded in the browser first, which also strips EXIF. It
+follows them onto the order book, the trade screen and the chat header. The
+bytes live in a private bucket and are served, like attachments, through a
+route that re-checks the session — visible to traders, not to the internet.
+
+**The trading record is real.** The profile's tiles are computed from the
+trader's own trades by the `trader_stats` view, on read. A trader with no
+history sees zeroes and a hint saying why — there are no fixtures left.
 
 **Identity and verification are real.** First sign-in creates the trader.
 Nicknames persist and can be edited. Verification state lives in
@@ -56,11 +75,15 @@ Nicknames persist and can be edited. Verification state lives in
 | `/trades/[id]` | A live manual trade: steps, chat, counterparty |
 | `POST /api/auth/challenge`, `POST /api/auth/verify`, `GET`/`DELETE /api/auth/session` | Sign-in |
 | `GET`/`PATCH /api/traders/me` | Your trader record — nickname only |
+| `GET /api/traders/me/stats` | Your trading record, computed from your trades |
+| `POST`/`DELETE /api/traders/me/avatar` | Set, replace or remove your picture |
+| `GET /api/traders/[address]/avatar` | A trader's picture, for any signed-in caller |
 | `GET`/`POST /api/traders/me/verifications` | Request a check; only the server grants one |
 | `GET`/`POST /api/ads`, `GET /api/ads/mine`, `DELETE /api/ads/[id]` | Ads |
 | `GET`/`POST /api/trades` | Your trades; open one against an ad |
 | `GET /api/trades/[id]`, `POST /api/trades/[id]/advance` | One trade, and its state machine |
-| `GET`/`POST /api/trades/[id]/messages` | Chat |
+| `GET`/`POST /api/trades/[id]/messages` | Chat — JSON posts text, multipart posts an image |
+| `GET /api/trades/[id]/messages/[messageId]/image` | An attachment's bytes, for a participant |
 
 ### Database
 
@@ -81,9 +104,8 @@ publishes an ad. `npm run db:reset` clears test data between runs.
 | **Escrow** | Deferred for a fast MVP, not abandoned | Trustless Work calls, XDR signing, Horizon. `components/trade/trade-screen.tsx` keeps the assembled composition — marked `SUPERSEDED`, unrouted, **do not delete**. |
 | **Stored payment details** | Never storing them is the protection | Nothing. Traders exchange SINPE numbers and account numbers in the trade chat. The columns existed briefly and were dropped in `20260816234721`. |
 | **On-chain verification** | The buyer can check the hash themselves | Reading Horizon for the recorded `asset_tx_hash`. |
-| **Real verification checks** | No provider is wired up | Email round trip, SMS code, KYC vendor. A request reaches `pending` and stops. |
+| **Real verification checks** | No provider is wired up | Email round trip, SMS code, KYC vendor. The dialog marks all three **Soon** and disables them — the request API and its `pending` state still work, so clearing `soon` in `VERIFICATION_METHODS` is what turns each one on. |
 | **Rating** | No model — reviews are thumbs up/down | A rating model, or keep omitting it rather than inventing a number. |
-| **Trader statistics on the profile** | `trader_stats` computes them | Point the profile screen at the view; it still reads fixtures. |
 | **Public trader profile** | — | `/traders/[address]` does not exist, though the profile's record tiles are already its shape. |
 
 ---
@@ -148,6 +170,9 @@ Collected so they are not rediscovered. Fuller notes live in
   rejected "José" and "Andrés" — a bug for a Costa Rica product.
 - **Views default to `SECURITY DEFINER`**, which bypasses the RLS underneath
   them.
+- **Storage does not cascade from Postgres.** Deleting a trade leaves its
+  attachments behind; `npm run db:reset` sweeps the bucket for exactly the
+  reason it also zeroes `reserved_amount`.
 - **React purity**: no `Date.now()` in a render body, no `setState` in an
   effect body, nothing timezone-dependent before mount.
 
@@ -160,9 +185,8 @@ Collected so they are not rediscovered. Fuller notes live in
    see §7.
 2. **Resolve the currency question.** It is the one thing making the current
    book incoherent.
-3. **Point the profile at `trader_stats`** so the record stops being fixtures.
-4. **Move domain types to `lib/domain/`** before the import count grows again.
-5. **Then escrow**, once the service question is settled.
+3. **Move domain types to `lib/domain/`** before the import count grows again.
+4. **Then escrow**, once the service question is settled.
 
 ---
 

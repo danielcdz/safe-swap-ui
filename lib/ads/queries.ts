@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { isPaymentMethod } from "@/lib/payment-methods";
 import { bookModeFor, type AdSide, type PriceType } from "@/components/ads/types";
 import type { P2POrder } from "@/components/p2p/types";
+import { avatarUrl } from "@/lib/avatar-url";
 
 /** A row of `public.order_book` as PostgREST returns it. */
 interface BookRow {
@@ -24,7 +25,10 @@ interface BookRow {
   ops_count: number;
   completion_rate: string | number | null;
   positive_feedback: string | number | null;
+  avatar_path: string | null;
 }
+
+type Advertiser = { nickname: string; avatar_path: string | null };
 
 /** Postgres numerics arrive as strings to preserve precision. */
 const num = (value: string | number) => Number(value);
@@ -45,6 +49,7 @@ function toOrder(row: BookRow): P2POrder {
       nickname: row.nickname,
       address: row.advertiser,
       verified: row.verified,
+      avatarUrl: avatarUrl(row.advertiser, row.avatar_path),
       // No rating model yet: reviews are thumbs up/down, not stars.
       rating: null,
       opsCount: row.ops_count,
@@ -231,7 +236,7 @@ export async function getOrderById(id: string): Promise<P2POrder | null> {
     .select(
       "id, advertiser, side, price_type, price, margin_percent, total_amount," +
         " min_limit, max_limit, window_minutes, payment_methods, terms," +
-        " traders!inner(nickname)",
+        " traders!inner(nickname, avatar_path)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -241,13 +246,14 @@ export async function getOrderById(id: string): Promise<P2POrder | null> {
 
   const row = data as unknown as AdRow & {
     advertiser: string;
-    traders: { nickname: string } | { nickname: string }[];
+    traders: Advertiser | Advertiser[];
   };
   const trader = Array.isArray(row.traders) ? row.traders[0] : row.traders;
 
   return toOrder({
     ...row,
     nickname: trader?.nickname ?? "Unknown",
+    avatar_path: trader?.avatar_path ?? null,
     // The trust block belongs to the book. A trade screen already shows the
     // counterparty's record in its own right.
     verified: false,
