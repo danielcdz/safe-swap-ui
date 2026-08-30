@@ -60,6 +60,36 @@ const TABLES = [
   "auth_challenges",
 ];
 
+/** Receipt images from trade chat. */
+const BUCKET = "trade-attachments";
+
+/** Everything in the attachments bucket, as full object paths. */
+async function attachmentPaths() {
+  const { data: entries, error } = await supabase.storage
+    .from(BUCKET)
+    .list("", { limit: 1000 });
+  if (error) throw new Error(`attachments: ${error.message}`);
+
+  const paths = [];
+  for (const entry of entries ?? []) {
+    // Objects are stored under a folder per trade. Folders are synthesised
+    // from the object names and come back with a null id.
+    if (entry.id !== null) {
+      paths.push(entry.name);
+      continue;
+    }
+    const { data: objects, error: nested } = await supabase.storage
+      .from(BUCKET)
+      .list(entry.name, { limit: 1000 });
+    if (nested) throw new Error(`attachments: ${nested.message}`);
+    for (const object of objects ?? []) paths.push(`${entry.name}/${object.name}`);
+  }
+  return paths;
+}
+
+/** What the report lists — the tables, plus the bucket that shadows them. */
+const ROWS = [...TABLES, "attachments"];
+
 async function counts() {
   const entries = await Promise.all(
     TABLES.map(async (table) => {
@@ -69,12 +99,20 @@ async function counts() {
       return [table, error ? "?" : (count ?? 0)];
     }),
   );
-  return Object.fromEntries(entries);
+
+  let attachments;
+  try {
+    attachments = (await attachmentPaths()).length;
+  } catch {
+    attachments = "?";
+  }
+
+  return { ...Object.fromEntries(entries), attachments };
 }
 
 function report(label, before, after) {
   console.log(`\n  ${label}`);
-  for (const table of TABLES) {
+  for (const table of ROWS) {
     const from = before[table];
     const to = after?.[table];
     const line = after === undefined ? `${from}` : `${from} → ${to}`;
@@ -113,6 +151,16 @@ async function main() {
     "reservations",
     supabase.from("ads").update({ reserved_amount: 0 }).gt("reserved_amount", 0),
   );
+
+  // Storage does not cascade from Postgres. Deleting a trade takes its
+  // messages with it but leaves the images those messages pointed at, in a
+  // private bucket where nothing will ever name them again — the same shape of
+  // problem as the reservation above, and just as invisible.
+  const paths = await attachmentPaths();
+  if (paths.length) {
+    const { error } = await supabase.storage.from(BUCKET).remove(paths);
+    if (error) throw new Error(`attachments: ${error.message}`);
+  }
 
   if (everything) {
     const adsQuery = supabase.from("ads").delete();

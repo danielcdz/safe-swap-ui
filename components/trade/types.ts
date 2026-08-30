@@ -44,6 +44,13 @@ export interface TradeMessage {
   /** Epoch ms, resolved once when the message is created — never at render. */
   timestamp: number;
   delivery?: "sent" | "delivered" | "read";
+  /**
+   * An attached image, served through our own route rather than a storage URL.
+   * `text` is its caption when there is one, and is otherwise empty. The
+   * dimensions are the stored ones, so the bubble can hold its space before
+   * the image arrives.
+   */
+  image?: { url: string; width: number; height: number };
 }
 
 export interface Trade {

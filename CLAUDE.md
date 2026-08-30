@@ -21,6 +21,7 @@ The app coordinates and records. It never holds funds.
 | Icons / motion | `lucide-react`, `framer-motion`, `next-themes` |
 | Font | Satoshi Variable, self-hosted through `next/font/local` |
 | Database | Supabase Postgres 17.6, project `wxgwzrlkdajxtplnixfd` |
+| Storage | Supabase, one private bucket — `trade-attachments` |
 | Wallet | `@stellar/freighter-api` 6, `@stellar/stellar-sdk` 16 |
 | Sessions | `jose` — HS256 JWT in an httpOnly cookie |
 | Deploy | Vercel Pro |
@@ -143,7 +144,8 @@ components/
 lib/
   auth/           session JWT, SEP-53 challenge, trader bootstrap
   ads/            ad and order-book queries
-  trades/         trade queries, state machine, messages
+  trades/         trade queries, state machine, messages, attachments
+  image/          canvas downscale before upload, which also strips EXIF
   supabase/       the privileged server client
   scoped-store.ts client cache bound to the session
 scripts/
@@ -193,6 +195,19 @@ expensive the longer it waits.
   terms.
 - **`trades.ad_id` and `trades.maker/taker` are `ON DELETE RESTRICT`.**
   Nothing upstream can be deleted while a trade points at it.
+- **Storage does not cascade from Postgres.** Deleting a trade takes its
+  messages with it and leaves the images those messages pointed at, in a
+  private bucket where nothing will ever name them again.
+  `scripts/db-reset.mjs` sweeps the bucket explicitly, the same way it releases
+  `reserved_amount`.
+- **Chat images are served through a route, never a signed URL.** A signed URL
+  works for whoever holds it, cookie or not, until it expires — for a bank
+  receipt that is a leak, not a feature.
+  `/api/trades/[id]/messages/[messageId]/image` re-checks the session on every
+  request, and being stable is what lets it be cached hard.
+- **The mime and dimensions stored for an attachment come from the bytes**,
+  through `lib/trades/image.ts`, not from the upload's `Content-Type`. That is
+  also what keeps SVG out: it never matches an image signature.
 - **Freighter has never been exercised by any automated test.** Every test
   signs with a generated keypair against the API. The extension handshake —
   `requestAccess`, the signing prompt, rejection, wrong network — is verified
@@ -203,8 +218,9 @@ expensive the longer it waits.
 ## 9. What is real, what is not
 
 **Real:** wallet sign-in via SEP-53, ads, the order book, manual trades end to
-end for both parties, chat backed by `trade_messages`, verification state,
-nicknames.
+end for both parties, chat backed by `trade_messages` — including image
+attachments, for the transfer screenshot the fiat leg turns on — verification
+state, nicknames.
 
 **Deliberately not built yet:**
 

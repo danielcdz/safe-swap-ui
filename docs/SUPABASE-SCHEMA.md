@@ -18,11 +18,12 @@ fix the document.
 | Project ref | `wxgwzrlkdajxtplnixfd` |
 | API URL | `https://wxgwzrlkdajxtplnixfd.supabase.co` |
 | Postgres | 17.6 |
-| Applied | 2026-08-17 |
+| Applied | 2026-08-30 |
 | Tables | 7, all with RLS enabled |
 | Views | `trader_stats`, `order_book` — both `security_invoker` |
+| Storage | one bucket, `trade-attachments` — private, no policies |
 | Seed data | **none, deliberately** — the book is empty until someone publishes |
-| App wiring | ads, order book, identity, verification, manual trades and chat are all live. Escrow is not. |
+| App wiring | ads, order book, identity, verification, manual trades and chat — with image attachments — are all live. Escrow is not. |
 
 Migrations, matching `supabase/migrations/` by filename:
 
@@ -39,6 +40,8 @@ Migrations, matching `supabase/migrations/` by filename:
 | `20260816222730` | `reserve_inventory_separately` |
 | `20260816234721` | `drop_trader_payment_details` |
 | `20260817000912` | `views_respect_caller_rls` |
+| `20260830152147` | `message_image_kind` |
+| `20260830152201` | `trade_message_attachments` |
 
 > **Filenames must match applied versions.** They diverged once already,
 > because the repo files were written before the migrations were applied and
@@ -81,7 +84,7 @@ trader_stats (view) = traders ⋈ trades ⋈ trade_reviews
 | `trader_verifications` | 5 | 0 | 1 | One row per trader per method |
 | `ads` | 16 | 8 | 1 | Standing terms that fill the order book |
 | `trades` | 16+ | 5 | 3 | A specific agreement, moving through manual settlement or escrow |
-| `trade_messages` | 6 | 2 | 2 | Chat, with escrow events in the same stream |
+| `trade_messages` | 11 | 5 | 2 | Chat, with escrow events and receipt images in the same stream |
 | `trade_reviews` | 6 | 1 | 3 | One review per counterparty per trade |
 
 `trader_stats` is a **view**, not columns: total trades, completion rate,
@@ -97,7 +100,7 @@ a view cannot. Swap for a materialized view if the read cost ever shows up.
 | `ad_status` | `active`, `paused`, `closed` |
 | `price_type` | `fixed`, `floating` |
 | `escrow_status` | `pending`, `funded`, `disputed`, `released`, `cancelled`, plus the manual states `open`, `fiat_sent`, `fiat_confirmed`, `asset_sent`, `completed` |
-| `message_kind` | `text`, `system` |
+| `message_kind` | `text`, `system`, `image` |
 | `verify_method` | `wallet`, `email`, `phone`, `id` |
 | `verify_status` | `unverified`, `pending`, `verified` |
 
@@ -138,6 +141,25 @@ exactly what a scraper wants, has to be defended on every endpoint forever,
 and can be handed to the wrong counterparty by any future bug. Held only in a
 trade's messages, the same detail is disclosed by the person it belongs to, to
 one counterparty, scoped to one trade. Do not reintroduce the columns.
+
+### An attachment is a message, and its bytes are not in Postgres
+
+`message_kind` gained `image` rather than a `trade_attachments` table. The chat
+is one ordered stream and a receipt belongs in it, next to the sentence that
+explains it — a second table would have to be merged back into that order on
+every read.
+
+The row carries the mime, byte count and dimensions; the bytes live in the
+`trade-attachments` bucket under `{trade_id}/{uuid}`. Dimensions are stored
+because the bubble has to reserve its space before the image loads, and the
+five columns are all-or-nothing (`messages_attachment_matches_kind`) — a
+half-populated row renders as a broken bubble with nothing left to say whether
+the object was ever uploaded.
+
+The mime is the one read out of the bytes by `lib/trades/image.ts`, not the one
+the upload declared. A `.png` extension on a text file is one `mv` away, and
+SVG stays out by never matching an image signature rather than by being named
+in a deny-list.
 
 ### Inventory is reserved separately from the total
 
@@ -183,6 +205,16 @@ quietly working.
 
 The advisor therefore reports **seven `rls_enabled_no_policy` INFO lints, and
 they are expected.** Do not "fix" them by dropping RLS.
+
+**Storage follows the same rule.** `trade-attachments` is private and
+`storage.objects` has RLS enabled with no policies, so the secret key is the
+only way to an object and the app decides who may have one. The browser is
+never handed a storage URL: bytes come back through
+`/api/trades/[id]/messages/[messageId]/image`, which re-checks the session.
+A signed URL would have been less code and wrong — it goes on working for
+whoever holds it long after the check that produced it is over. The bucket also
+carries its own `file_size_limit` and `allowed_mime_types`, behind the
+handler's validation rather than instead of it.
 
 **Views must be `security_invoker`.** A Postgres view defaults to
 `SECURITY DEFINER`, running as its creator and so bypassing the deny-all on
@@ -235,8 +267,12 @@ schema. That was the only WARN and it is cleared.
   reads fixtures from `components/profile/mock-profile.ts`.
 - **No payment-methods table** — they are a `text[]` on `ads`, GIN-indexed for
   filtering. Promote to a table if they need metadata.
-- **No auth, storage, or Realtime.** Realtime is the plausible next one, for
-  chat and escrow status; note it would need the JWT approach in §4.
+- **No auth or Realtime.** Realtime is the plausible next one, for chat and
+  escrow status; note it would need the JWT approach in §4.
+- **No retention policy on attachments.** A receipt lives as long as its
+  message does. Purging them some days after a trade settles would be the
+  stronger privacy posture, but it needs a scheduled job this project does not
+  have yet.
 - **Escrow/chain state.** `trades.escrow_contract_id` is the only slot for it.
   Trustless Work calls, XDR signing and Horizon polling are long-running and
   do not belong in a route handler — that is a separate service decision.

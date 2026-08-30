@@ -12,7 +12,7 @@ document; the detailed files below stay authoritative for their own areas.
 | [`WALLET-AUTH.md`](./WALLET-AUTH.md) | Freighter connection and SEP-53 sign-in |
 | [`TRADES-PLAN.md`](./TRADES-PLAN.md) | Manual settlement design and build order |
 
-Last updated 2026-08-17, on `feat/manual-trades`.
+Last updated 2026-08-30, on `feat/chat-attachments`.
 
 ---
 
@@ -36,9 +36,18 @@ perform it. Cancelling is allowed only before anything has moved; past that
 the exit is a dispute. A stale `from` status loses the race rather than
 skipping a step.
 
-**Chat is real.** Messages live in `trade_messages`, poll on a 3s chained
-timeout, and are readable only by the trade's two participants. System events
-land in the same stream.
+**Chat is real, and carries images.** Messages live in `trade_messages`, poll
+on a 3s chained timeout, and are readable only by the trade's two participants.
+System events land in the same stream, and so do attachments: the buyer can
+paste, drop or pick a screenshot of the transfer, capped at 20 per trade. The
+bytes go to a private bucket and come back through a route that re-checks the
+session — never a signed URL, which would work for anyone holding it. The
+format and dimensions recorded are read out of the bytes rather than taken from
+the upload's declared type.
+
+The UI says plainly that a screenshot is not proof of payment. It is the
+easiest thing in the conversation to fake, and the seller still has to see the
+money in their own account.
 
 **Identity and verification are real.** First sign-in creates the trader.
 Nicknames persist and can be edited. Verification state lives in
@@ -60,7 +69,8 @@ Nicknames persist and can be edited. Verification state lives in
 | `GET`/`POST /api/ads`, `GET /api/ads/mine`, `DELETE /api/ads/[id]` | Ads |
 | `GET`/`POST /api/trades` | Your trades; open one against an ad |
 | `GET /api/trades/[id]`, `POST /api/trades/[id]/advance` | One trade, and its state machine |
-| `GET`/`POST /api/trades/[id]/messages` | Chat |
+| `GET`/`POST /api/trades/[id]/messages` | Chat — JSON posts text, multipart posts an image |
+| `GET /api/trades/[id]/messages/[messageId]/image` | An attachment's bytes, for a participant |
 
 ### Database
 
@@ -148,6 +158,9 @@ Collected so they are not rediscovered. Fuller notes live in
   rejected "José" and "Andrés" — a bug for a Costa Rica product.
 - **Views default to `SECURITY DEFINER`**, which bypasses the RLS underneath
   them.
+- **Storage does not cascade from Postgres.** Deleting a trade leaves its
+  attachments behind; `npm run db:reset` sweeps the bucket for exactly the
+  reason it also zeroes `reserved_amount`.
 - **React purity**: no `Date.now()` in a render body, no `setState` in an
   effect body, nothing timezone-dependent before mount.
 

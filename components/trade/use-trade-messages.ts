@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { downscaleImage } from "@/lib/image/downscale";
 import type { TradeMessage } from "./types";
 
 /**
@@ -16,14 +17,19 @@ const POLL_MS = 3000;
 
 interface ApiMessage {
   id: string;
-  kind: "text" | "system";
+  kind: "text" | "system" | "image";
   author: string | null;
   body: string;
   createdAt: string;
+  attachment?: { mime: string; bytes: number; width: number; height: number };
 }
 
 /** Maps a stored message to the shape the bubbles render. */
-function toBubble(message: ApiMessage, viewer: string): TradeMessage {
+function toBubble(
+  message: ApiMessage,
+  viewer: string,
+  tradeId: string,
+): TradeMessage {
   return {
     id: message.id,
     author:
@@ -35,13 +41,28 @@ function toBubble(message: ApiMessage, viewer: string): TradeMessage {
     text: message.body,
     timestamp: new Date(message.createdAt).getTime(),
     // Stored at all means it reached the server; there is no read receipt yet.
-    delivery: message.kind === "text" && message.author === viewer ? "sent" : undefined,
+    delivery:
+      message.kind !== "system" && message.author === viewer
+        ? "sent"
+        : undefined,
+    ...(message.attachment
+      ? {
+          image: {
+            // Our route, not a storage URL: it re-checks the session on every
+            // request, and it is stable enough for the browser to cache.
+            url: `/api/trades/${tradeId}/messages/${message.id}/image`,
+            width: message.attachment.width,
+            height: message.attachment.height,
+          },
+        }
+      : {}),
   };
 }
 
 export function useTradeMessages(tradeId: string, viewer: string) {
   const [messages, setMessages] = React.useState<TradeMessage[]>([]);
   const [sending, setSending] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const load = React.useCallback(
@@ -53,7 +74,7 @@ export function useTradeMessages(tradeId: string, viewer: string) {
         });
         if (!response.ok) return;
         const data = (await response.json()) as { messages: ApiMessage[] };
-        setMessages(data.messages.map((m) => toBubble(m, viewer)));
+        setMessages(data.messages.map((m) => toBubble(m, viewer, tradeId)));
       } catch {
         // Transient; the next tick tries again.
       }
@@ -108,5 +129,54 @@ export function useTradeMessages(tradeId: string, viewer: string) {
     [tradeId, load],
   );
 
-  return { messages, send, sending, error };
+  /**
+   * Posts an image to the same endpoint as text — a message is a message, and
+   * multipart rather than JSON is what says which kind. Re-reads afterwards
+   * for the same reason `send` does.
+   *
+   * Returns whether it landed, so a caller that is doing something *else* on
+   * the strength of the receipt — advancing the trade, say — can decline to.
+   */
+  const sendImage = React.useCallback(
+    async (file: File): Promise<boolean> => {
+      setUploading(true);
+      setError(null);
+      try {
+        const { blob } = await downscaleImage(file);
+
+        const form = new FormData();
+        form.append("file", blob, "receipt");
+
+        // No content-type header: the browser has to set the multipart
+        // boundary itself.
+        const response = await fetch(`/api/trades/${tradeId}/messages`, {
+          method: "POST",
+          body: form,
+        });
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          setError(data.error ?? "Could not send the image.");
+          return false;
+        }
+        await load();
+        return true;
+      } catch (cause) {
+        // downscaleImage explains itself — an unreadable file is the common
+        // case and the message says what to try instead.
+        setError(
+          cause instanceof Error ? cause.message : "Could not reach the server.",
+        );
+        return false;
+      } finally {
+        setUploading(false);
+      }
+    },
+    [tradeId, load],
+  );
+
+  // So a caller can open a fresh surface — the proof dialog — without a
+  // failure from an earlier send greeting them there.
+  const clearError = React.useCallback(() => setError(null), []);
+
+  return { messages, send, sendImage, sending, uploading, error, clearError };
 }
